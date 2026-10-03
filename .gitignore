@@ -1,0 +1,5 @@
+agent-tools/
+.DS_Store
+*.qmlc
+__pycache__/
+*.py[cod]

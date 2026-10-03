@@ -1,0 +1,26 @@
+{
+  // Sample Omarchy menu extension for GeForce NOW Menu (matt-dance.gfn).
+  //
+  // IMPORTANT: `omarchy plugin add` does NOT merge this file automatically.
+  // Prefer the safe helper after install:
+  //   bash scripts/install-menu-extension.sh
+  // Or merge these keys by hand into:
+  //   ~/.config/omarchy/extensions/omarchy-menu.jsonc
+  // then run: omarchy menu refresh
+  //
+  // There is no first-party per-game "Games" library in Omarchy. This adds a
+  // Games-adjacent submenu with a Search action that summons the plugin overlay.
+  // Per-title launchers should use Apps .desktop entries (see scripts/).
+
+  "games": {
+    "icon": "󰊴",
+    "label": "Games",
+    "description": "GeForce NOW and other game launchers"
+  },
+  "games.gfn-search": {
+    "icon": "󰍉",
+    "label": "Search GeForce NOW",
+    "description": "Open the GFN search overlay (plugin: matt-dance.gfn)",
+    "action": "omarchy-shell shell summon matt-dance.gfn '{}'"
+  }
+}

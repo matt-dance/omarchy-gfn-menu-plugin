@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "matt-dance.gfn",
+  "name": "GeForce NOW Menu",
+  "version": "0.1.0",
+  "author": "Matt Dance",
+  "license": "MIT",
+  "description": "Search GeForce NOW and add titles as native Omarchy Apps launchers.",
+  "kinds": ["overlay", "service"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Overlay.qml",
+    "service": "Service.qml"
+  }
+}

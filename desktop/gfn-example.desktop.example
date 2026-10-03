@@ -1,0 +1,28 @@
+# Example Apps launcher for a GeForce NOW title (RetroArch Game Launcher pattern).
+#
+# Install destination (user-local, no sudo):
+#   ~/.local/share/applications/gfn-<parent-game-id>.desktop
+#
+# Prefer generating these with:
+#   scripts/write-desktop-entry.sh \
+#     --cms-id 101069911 \
+#     --parent-game-id d32c9410-62cb-45cf-9c53-740bb92d4a2d \
+#     --title "Diablo IV"
+#
+# Exec= uses Flatpak --url-route (research: project agent-store docs/gfn-linux-launch.md).
+# Re-verify cmsId / parentGameId from the live GraphQL catalog before shipping.
+# Do not commit live per-user .desktop files into the plugin repo.
+
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Diablo IV (GeForce NOW)
+Comment=Stream via GeForce NOW
+Categories=Game;
+Exec=flatpak run --command=/app/cef/GeForceNOW com.nvidia.geforcenow '--url-route=#?cmsId=101069911&launchSource=External&shortName=game_gfn_pc&parentGameId=d32c9410-62cb-45cf-9c53-740bb92d4a2d'
+Terminal=false
+StartupNotify=true
+X-GFN-CmsId=101069911
+X-GFN-ParentGameId=d32c9410-62cb-45cf-9c53-740bb92d4a2d
+X-GFN-ShortName=game_gfn_pc
+X-Omarchy-Plugin=matt-dance.gfn
