@@ -6,13 +6,16 @@
 #   write-desktop-entry.sh --cms-id <cmsId> --parent-game-id <uuid> \
 #     --title <display-name> [--short-name <slug>] [--force]
 #
-# --short-name defaults to game_gfn_pc when omitted or empty (Klay convention).
+# --short-name may be empty (proven Diablo IV launcher uses empty shortName).
+# Do not invent game_gfn_pc.
 #
 # Output path:
 #   ~/.local/share/applications/gfn-<sanitized-parent-game-id>.desktop
 #
-# Exec= uses the Flatpak --url-route pattern from research notes:
-#   docs/gfn-linux-launch.md (project agent store)
+# Exec= matches the proven CEF launch from HANDOFF / gfn-play-diablo-iv:
+#   flatpak run --user --command=/app/cef/GeForceNOW --cwd=/app/cef
+#     --env=NV_HOST_DRIVER_VERSION=… --env=NV_FLATPAK_DRIVER_VERSION=…
+#     com.nvidia.geforcenow --url-route='#?cmsId=…&launchSource=External&shortName=&parentGameId=…'
 
 set -euo pipefail
 
@@ -45,7 +48,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      sed -n '2,16p' "$0"
+      sed -n '2,20p' "$0"
       exit 0
       ;;
     *)
@@ -58,11 +61,6 @@ done
 if [[ -z "$CMS_ID" || -z "$PARENT_GAME_ID" || -z "$GAME_TITLE" ]]; then
   echo "Required: --cms-id, --parent-game-id, and --title" >&2
   exit 2
-fi
-
-# Empty shortName from catalog → Klay default (see gfn-linux-launch.md).
-if [[ -z "$SHORT_NAME" ]]; then
-  SHORT_NAME="game_gfn_pc"
 fi
 
 # Sanitize for a stable desktop filename (keep alnum, dash, underscore, dot).
@@ -81,25 +79,42 @@ if [[ -e "$DESKTOP_PATH" && "$FORCE" -ne 1 ]]; then
   exit 0
 fi
 
-# Escape desktop-entry special characters in Name=.
+# Escape desktop-entry special characters in Name= / Comment=.
 escape_desktop_string() {
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/\n/\\n/g' -e 's/\r/\\r/g'
 }
 
+# Desktop Entry Spec: quote args containing reserved chars with double quotes;
+# inside quotes escape \, ", `, $.
+escape_exec_quoted() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/`/\\`/g' -e 's/\$/\\$/g'
+}
+
 SAFE_TITLE="$(escape_desktop_string "$GAME_TITLE")"
 
-# Quote the entire --url-route argument; do not invent other launch APIs.
+nv_host="$(flatpak --gl-drivers 2>/dev/null | grep -Eo '^nvidia-[0-9-]+' | head -n 1 || true)"
+
 URL_ROUTE="#?cmsId=${CMS_ID}&launchSource=External&shortName=${SHORT_NAME}&parentGameId=${PARENT_GAME_ID}"
-EXEC_LINE="flatpak run --command=/app/cef/GeForceNOW com.nvidia.geforcenow '--url-route=${URL_ROUTE}'"
+ROUTE_QUOTED="$(escape_exec_quoted "--url-route=${URL_ROUTE}")"
+
+EXEC_LINE="flatpak run --user --command=/app/cef/GeForceNOW --cwd=/app/cef"
+if [[ -n "$nv_host" ]]; then
+  EXEC_LINE+=" --env=NV_HOST_DRIVER_VERSION=${nv_host}"
+  EXEC_LINE+=" --env=NV_FLATPAK_DRIVER_VERSION=${nv_host}"
+fi
+EXEC_LINE+=" com.nvidia.geforcenow \"${ROUTE_QUOTED}\""
 
 cat >"$DESKTOP_PATH" <<EOF
 [Desktop Entry]
 Type=Application
 Version=1.0
 Name=${SAFE_TITLE}
+GenericName=${SAFE_TITLE} on GeForce NOW
 Comment=Stream via GeForce NOW (Omarchy plugin matt-dance.gfn)
-Categories=Game;
 Exec=${EXEC_LINE}
+Icon=applications-games
+StartupWMClass=GeForceNOW
+Categories=Game;
 Terminal=false
 StartupNotify=true
 X-GFN-CmsId=${CMS_ID}
@@ -111,6 +126,12 @@ EOF
 # Best-effort refresh of desktop database when available.
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
+fi
+
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  if ! desktop-file-validate "$DESKTOP_PATH"; then
+    echo "warning: desktop-file-validate reported issues for $DESKTOP_PATH" >&2
+  fi
 fi
 
 echo "$DESKTOP_PATH"

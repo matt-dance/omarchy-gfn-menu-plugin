@@ -5,24 +5,30 @@
 #
 # Prefer generating these with:
 #   scripts/write-desktop-entry.sh \
-#     --cms-id 101069911 \
+#     --cms-id 102670811 \
 #     --parent-game-id d32c9410-62cb-45cf-9c53-740bb92d4a2d \
-#     --title "Diablo IV"
+#     --title "Diablo IV" \
+#     --short-name "" \
+#     --force
 #
-# Exec= uses Flatpak --url-route (research: project agent-store docs/gfn-linux-launch.md).
-# Re-verify cmsId / parentGameId from the live GraphQL catalog before shipping.
+# Exec= matches proven CEF launch (HANDOFF / gfn-play-diablo-iv).
+# cmsId must be a *variant* id (Steam 102670811 / Battle.net 102348311),
+# not the top-level GFNDB id 101069911. shortName may be empty.
 # Do not commit live per-user .desktop files into the plugin repo.
 
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=Diablo IV (GeForce NOW)
+Name=Diablo IV
+GenericName=Diablo IV on GeForce NOW
 Comment=Stream via GeForce NOW
+Exec=flatpak run --user --command=/app/cef/GeForceNOW --cwd=/app/cef --env=NV_HOST_DRIVER_VERSION=nvidia-610-57-04 --env=NV_FLATPAK_DRIVER_VERSION=nvidia-610-57-04 com.nvidia.geforcenow "--url-route=#?cmsId=102670811&launchSource=External&shortName=&parentGameId=d32c9410-62cb-45cf-9c53-740bb92d4a2d"
+Icon=applications-games
+StartupWMClass=GeForceNOW
 Categories=Game;
-Exec=flatpak run --command=/app/cef/GeForceNOW com.nvidia.geforcenow '--url-route=#?cmsId=101069911&launchSource=External&shortName=game_gfn_pc&parentGameId=d32c9410-62cb-45cf-9c53-740bb92d4a2d'
 Terminal=false
 StartupNotify=true
-X-GFN-CmsId=101069911
+X-GFN-CmsId=102670811
 X-GFN-ParentGameId=d32c9410-62cb-45cf-9c53-740bb92d4a2d
-X-GFN-ShortName=game_gfn_pc
+X-GFN-ShortName=
 X-Omarchy-Plugin=matt-dance.gfn

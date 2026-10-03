@@ -59,6 +59,7 @@ Item {
         gameId: String(row.id || ""),
         cmsId: String(row.cmsId || ""),
         shortName: String(row.shortName || ""),
+        appStore: String(row.appStore || ""),
         title: String(row.title || ""),
         subtitle: String(row.subtitle || "")
       })
@@ -164,6 +165,7 @@ Item {
       id: row.gameId,
       cmsId: row.cmsId,
       shortName: row.shortName,
+      appStore: row.appStore,
       title: row.title
     }
     var svc = root.service()
@@ -320,6 +322,7 @@ Item {
             required property string gameId
             required property string cmsId
             required property string shortName
+            required property string appStore
             required property string title
             required property string subtitle
 

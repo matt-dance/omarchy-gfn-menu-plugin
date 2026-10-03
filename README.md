@@ -102,7 +102,7 @@ python3 scripts/gfn-catalog-search.py "Diablo IV"
 # Force refetch:  python3 scripts/gfn-catalog-search.py "Diablo IV" --refresh
 ```
 
-`shortName` may be `""` in catalog rows; write/launch still default to `game_gfn_pc`.
+`cmsId` is a **variant** id (Steam preferred when present). Top-level catalog ids like `101069911` are not launch-safe. `shortName` may be `""` — empty is valid; do not invent `game_gfn_pc`.
 
 ## Apps / `.desktop` launchers (RetroArch pattern)
 
@@ -112,38 +112,44 @@ This plugin ships:
 
 | Path | Purpose |
 |------|---------|
-| [`scripts/write-desktop-entry.sh`](scripts/write-desktop-entry.sh) | Writes `~/.local/share/applications/gfn-<parent-game-id>.desktop` with Flatpak `--url-route` `Exec=` |
+| [`scripts/write-desktop-entry.sh`](scripts/write-desktop-entry.sh) | Writes `~/.local/share/applications/gfn-<parent-game-id>.desktop` with proven CEF `Exec=` |
 | [`desktop/gfn-example.desktop.example`](desktop/gfn-example.desktop.example) | Diablo IV example entry (not installed automatically) |
 
-Launch pattern (from research `docs/gfn-linux-launch.md`):
+Launch pattern (proven `gfn-play-diablo-iv` / HANDOFF):
 
 ```bash
-flatpak run --command=/app/cef/GeForceNOW com.nvidia.geforcenow \
-  '--url-route=#?cmsId=<CMS_ID>&launchSource=External&shortName=<SHORT_NAME>&parentGameId=<UUID>'
+nv_host="$(flatpak --gl-drivers 2>/dev/null | grep -Eo '^nvidia-[0-9-]+' | head -n 1)"
+flatpak run --user \
+  --command=/app/cef/GeForceNOW --cwd=/app/cef \
+  ${nv_host:+--env=NV_HOST_DRIVER_VERSION="$nv_host"} \
+  ${nv_host:+--env=NV_FLATPAK_DRIVER_VERSION="$nv_host"} \
+  com.nvidia.geforcenow \
+  --url-route='#?cmsId=<VARIANT_CMS_ID>&launchSource=External&shortName=&parentGameId=<UUID>'
 ```
 
-When catalog `shortName` is empty, the writer defaults to `game_gfn_pc` (Klay convention).
-
-### Diablo IV example (catalog snapshot 2026-10-01 — re-verify before shipping)
+### Diablo IV example (proven Steam variant)
 
 | Field | Value |
 |-------|--------|
 | Title | Diablo IV |
-| `cmsId` | `101069911` |
+| `cmsId` (Steam) | `102670811` |
+| `cmsId` (Battle.net) | `102348311` |
 | `parentGameId` / `id` | `d32c9410-62cb-45cf-9c53-740bb92d4a2d` |
-| `shortName` (fallback) | `game_gfn_pc` |
+| `shortName` | empty |
 
 ```bash
 bash scripts/write-desktop-entry.sh \
-  --cms-id 101069911 \
+  --cms-id 102670811 \
   --parent-game-id d32c9410-62cb-45cf-9c53-740bb92d4a2d \
-  --title "Diablo IV"
+  --title "Diablo IV" \
+  --short-name "" \
+  --force
 ```
 
-Resulting `Exec=` (also in the example `.desktop`):
+Resulting `Exec=` (NV version from `flatpak --gl-drivers`):
 
 ```text
-flatpak run --command=/app/cef/GeForceNOW com.nvidia.geforcenow '--url-route=#?cmsId=101069911&launchSource=External&shortName=game_gfn_pc&parentGameId=d32c9410-62cb-45cf-9c53-740bb92d4a2d'
+flatpak run --user --command=/app/cef/GeForceNOW --cwd=/app/cef --env=NV_HOST_DRIVER_VERSION=nvidia-… --env=NV_FLATPAK_DRIVER_VERSION=nvidia-… com.nvidia.geforcenow "--url-route=#?cmsId=102670811&launchSource=External&shortName=&parentGameId=d32c9410-62cb-45cf-9c53-740bb92d4a2d"
 ```
 
 Desktop keys `X-GFN-CmsId`, `X-GFN-ParentGameId`, and `X-GFN-ShortName` carry the same ids for tooling.
@@ -171,7 +177,7 @@ Rules worth knowing: namespaced non-`omarchy.*` id, every kind has an entry poin
 | Sample menu extension snippet | Works as copy/merge source — not auto-applied |
 | Menu extension install helper | Works — `scripts/install-menu-extension.sh` (managed BEGIN/END, backup, dry-run) |
 | `.desktop` writer script | Works — Flatpak `--url-route` `Exec=` + `X-GFN-*` keys |
-| Diablo IV launch ids | Wired (`cmsId` `101069911`, uuid above) — re-verify on Omarchy |
+| Diablo IV launch ids | Proven Steam `cmsId` `102670811` (variant; not top-level `101069911`) |
 | GFN catalog search | **Works** — `scripts/gfn-catalog-search.py` (GraphQL cache + local filter); Diablo IV offline fallback |
 | Auto-merge menu on `plugin add` | **Not supported** by Omarchy — use the install helper (or merge by hand) |
 

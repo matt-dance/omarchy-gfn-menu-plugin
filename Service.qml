@@ -70,7 +70,7 @@ Item {
   }
 
   function launch(game) {
-    // Flatpak --url-route launch (docs/gfn-linux-launch.md).
+    // Proven CEF Flatpak launch (HANDOFF / gfn-play-diablo-iv).
     root.lastAction = "launch"
     root.lastError = ""
     var g = game || {}

@@ -1,26 +1,28 @@
 .pragma library
 
 // Shared helpers for GeForce NOW search / add / launch.
-// Launch uses Flatpak --url-route (see project docs/gfn-linux-launch.md).
+// Launch matches proven CEF path (HANDOFF / gfn-play-diablo-iv).
 // Do NOT invent authenticated GFN session APIs.
 
 /**
- * Offline Diablo IV row (live catalog 2026-10-01). Used when the catalog
- * helper cannot reach network or cache. Re-verify ids before shipping.
+ * Offline Diablo IV row (proven Steam variant). Used when the catalog
+ * helper cannot reach network or cache.
  *
- * Each row: { id, cmsId, shortName, title, subtitle }
+ * Each row: { id, cmsId, shortName, title, subtitle, appStore }
  *   id        — catalog UUID → parentGameId
- *   cmsId     — numeric CMS id (required for --url-route)
- *   shortName — variant slug; empty → game_gfn_pc at write/launch time
+ *   cmsId     — *variant* CMS id (Steam preferred; not top-level GFNDB id)
+ *   shortName — variant slug; empty is valid for --url-route
+ *   appStore  — STEAM / BATTLENET / …
  */
 function diabloFallback() {
   return [
     {
       id: "d32c9410-62cb-45cf-9c53-740bb92d4a2d",
-      cmsId: "101069911",
+      cmsId: "102670811",
       shortName: "",
+      appStore: "STEAM",
       title: "Diablo IV",
-      subtitle: "Offline fallback — cmsId 101069911"
+      subtitle: "Steam · cmsId 102670811 · shortName (empty)"
     }
   ]
 }
@@ -30,18 +32,21 @@ function enrichRow(row) {
   var id = String(r.id || r.parentGameId || "")
   var cmsId = String(r.cmsId || "")
   var shortName = String(r.shortName || "")
+  var appStore = String(r.appStore || "")
   var title = String(r.title || "")
   var subtitle = String(r.subtitle || "")
   if (!subtitle.length) {
-    var sn = shortName.length ? shortName : "game_gfn_pc (default)"
+    var sn = shortName.length ? shortName : "(empty)"
+    var store = appStore.length ? (appStore + " · ") : ""
     subtitle = cmsId.length
-      ? ("cmsId " + cmsId + " · shortName " + sn)
+      ? (store + "cmsId " + cmsId + " · shortName " + sn)
       : "Missing cmsId"
   }
   return {
     id: id,
     cmsId: cmsId,
     shortName: shortName,
+    appStore: appStore,
     title: title,
     subtitle: subtitle
   }
@@ -112,11 +117,10 @@ function parseSearchOutput(text, query) {
 }
 
 /**
- * Effective shortName for --url-route (Klay default when catalog shortName is empty).
+ * shortName for --url-route. Empty string is valid (proven Diablo IV).
  */
 function effectiveShortName(shortName) {
-  var s = String(shortName || "").trim()
-  return s.length ? s : "game_gfn_pc"
+  return String(shortName || "").trim()
 }
 
 /**
@@ -130,17 +134,19 @@ function writeDesktopEntryCommand(scriptPath, game) {
     String(scriptPath),
     "--cms-id", String(g.cmsId || ""),
     "--parent-game-id", String(g.id || g.parentGameId || ""),
-    "--title", String(g.title || "GeForce NOW Game")
+    "--title", String(g.title || "GeForce NOW Game"),
+    "--force"
   ]
-  var sn = String(g.shortName || "").trim()
-  if (sn.length)
-    argv.push("--short-name", sn)
+  // Always pass --short-name so an empty catalog value stays empty
+  // (writer must not invent game_gfn_pc).
+  argv.push("--short-name", effectiveShortName(g.shortName))
   return argv
 }
 
 /**
- * Flatpak --url-route launch for a catalog title.
- * Requires cmsId + id (parentGameId). shortName defaults to game_gfn_pc.
+ * Proven CEF Flatpak launch (same shape as gfn-play-diablo-iv).
+ * Resolves NV_* driver envs at runtime via bash.
+ * Requires cmsId + id (parentGameId). shortName may be empty.
  */
 function launchCommand(game) {
   var g = game || {}
@@ -150,11 +156,15 @@ function launchCommand(game) {
   var route = "#?cmsId=" + cmsId +
     "&launchSource=External&shortName=" + shortName +
     "&parentGameId=" + parentGameId
-  return [
-    "flatpak",
-    "run",
-    "--command=/app/cef/GeForceNOW",
-    "com.nvidia.geforcenow",
-    "--url-route=" + route
-  ]
+  // Quote for bash single-quoted string: only ' needs escaping as '\'' 
+  var routeQuoted = String(route).replace(/'/g, "'\\''")
+  var script =
+    'nv_host="$(flatpak --gl-drivers 2>/dev/null | grep -Eo \'^nvidia-[0-9-]+\' | head -n 1)"; ' +
+    'exec flatpak run --user ' +
+    '--command=/app/cef/GeForceNOW --cwd=/app/cef ' +
+    '${nv_host:+--env=NV_HOST_DRIVER_VERSION="$nv_host"} ' +
+    '${nv_host:+--env=NV_FLATPAK_DRIVER_VERSION="$nv_host"} ' +
+    'com.nvidia.geforcenow ' +
+    '--url-route=\'' + routeQuoted + '\''
+  return ["bash", "-c", script]
 }
