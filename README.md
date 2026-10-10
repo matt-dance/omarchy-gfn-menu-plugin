@@ -12,6 +12,16 @@ Installable **Omarchy (Quattro)** plugin that aims to make GeForce NOW titles fe
 
 The plugin id is `matt-dance.gfn-omarchy`. Omarchy names third-party plugins `author.short-name` (the same shape as `njpatel.omabot`). The install folder is `~/.config/omarchy/plugins/matt-dance.gfn-omarchy` and must match that id. Display name stays **GeForce NOW Menu**.
 
+## Screenshots
+
+Setup → Plugins on this Omarchy build lists a name and an id. It does not draw images. The community listing at [omarchyplugins.com](https://omarchyplugins.com) uses one file at the repo root, `preview.png` (png, jpg, jpeg, webp, or avif). That file is the search overlay. Both shots are below.
+
+![Search overlay for Diablo IV. Steam is already on the menu. Battle.net shows the store.](docs/screenshots/searching.png)
+
+![Gaming → GeForce NOW, with added games named GFN - Title.](docs/screenshots/added-game.png)
+
+The store is the menu row's `description` and the desktop `Comment`. While you browse, this Omarchy menu draws the title only. It draws a second line only while the menu filter is active, and that line is the menu path, not the store. The store subtitle shows on the search result, as in the first shot.
+
 Search, add, multi-remove, and direct launch work. Search fetches and caches the public GraphQL apps list (`games.geforce.com/graphql`, US/`en_US`, TTL ~6h) and filters locally by title. This repo does not invent authenticated GFN search or library APIs. A game that is already on the menu still appears in search, with the subtitle `game already added`, and Enter does not add it again. Menu and desktop names are `GFN - <Game Name>`, with the store as the subtitle. Launch goes through `scripts/gfn-play.sh`. Offline or cache failure falls back to Diablo IV.
 
 ## Why `overlay` + `service`?
@@ -203,6 +213,7 @@ Also remove any Games rows (or the `BEGIN`/`END matt-dance.gfn-omarchy` managed 
 ```text
 .
 ├── manifest.json
+├── preview.png              # marketplace card (same shot as docs/screenshots/searching.png)
 ├── Overlay.qml              # overlay entry point (search UI)
 ├── Service.qml              # service entry point (add / --url-route launch)
 ├── GfnModel.js              # search/launch/writer helpers + Diablo IV fallback
@@ -217,6 +228,9 @@ Also remove any Games rows (or the `BEGIN`/`END matt-dance.gfn-omarchy` managed 
 │   └── write-desktop-entry.sh
 ├── desktop/
 │   └── gfn-example.desktop.example   # Diablo IV example
+├── docs/screenshots/
+│   ├── searching.png          # search overlay
+│   └── added-game.png         # Gaming → GeForce NOW
 ├── HANDOFF.md               # launch facts and machine constraints
 ├── PLAN.md                  # original design
 ├── LICENSE                  # MIT
