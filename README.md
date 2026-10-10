@@ -14,9 +14,9 @@ The plugin id is `matt-dance.gfn-omarchy`. Omarchy names third-party plugins `au
 
 ## Screenshots
 
-Setup → Plugins on this Omarchy build lists a name and an id. It does not draw images. The community listing at [plugins.omarchy.org](https://plugins.omarchy.org) uses one file at the repo root, `preview.png` (png, jpg, jpeg, webp, or avif). That file is the Gaming → GeForce NOW menu: search, the installed games, and remove.
+Setup → Plugins on this Omarchy build lists a name and an id. It does not draw images. The community listing at [plugins.omarchy.org](https://plugins.omarchy.org) uses one file at the repo root, `preview.png` (png, jpg, jpeg, webp, or avif). That file shows the Gaming → GeForce NOW menu (search, the installed games, and remove) side by side with an added game (Diablo IV) in the Apps menu.
 
-![Gaming → GeForce NOW menu with search, two installed games, and Remove a game.](preview.png)
+![Gaming → GeForce NOW menu with search, two installed games, and Remove a game, next to the Apps menu row for the added Diablo IV.](preview.png)
 
 ![Search overlay for Diablo IV. Steam is already on the menu. Battle.net shows the store.](docs/screenshots/searching.png)
 
@@ -218,7 +218,7 @@ Also remove any Games rows (or the `BEGIN`/`END matt-dance.gfn-omarchy` managed 
 ```text
 .
 ├── manifest.json
-├── preview.png              # marketplace card: Gaming menu with search, games, and remove
+├── preview.png              # marketplace card: GFN menu + added Diablo IV row, side by side
 ├── Overlay.qml              # overlay entry point (search UI)
 ├── Service.qml              # service entry point (add / --url-route launch)
 ├── GfnModel.js              # search/launch/writer helpers + Diablo IV fallback
