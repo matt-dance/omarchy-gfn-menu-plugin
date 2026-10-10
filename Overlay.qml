@@ -14,6 +14,8 @@ Item {
   property var shell: null
   property var manifest: null
   property var pluginRegistry: null
+  // Injected by omarchy-shell for overlay+service plugins (do not shadow with a function).
+  property var service: null
 
   property bool opened: false
   property string filterText: ""
@@ -21,7 +23,6 @@ Item {
   property bool cursorActive: false
   property var results: []
   property string statusText: "GFN catalog search — type a title, then Enter (cache TTL ~6h)"
-  property var boundService: null
 
   property color background: Color.menu.background
   property color foreground: Color.menu.text
@@ -38,17 +39,6 @@ Item {
   property int cardWidth: Math.min(Style.space(480), panel.width - Style.gapsOut * 2)
   property int cardHeight: Math.min(Style.space(420), panel.height - Style.gapsOut * 2)
   property int rowHeight: Math.max(Style.space(44), Style.font.title + Style.spacing.md)
-
-  function service() {
-    if (!root.pluginRegistry || typeof root.pluginRegistry.getService !== "function")
-      return null
-    var id = (root.manifest && root.manifest.id) ? root.manifest.id : "matt-dance.gfn"
-    return root.pluginRegistry.getService(id)
-  }
-
-  function bindService() {
-    root.boundService = root.service()
-  }
 
   function applyResults(rows, pending) {
     root.results = rows || []
@@ -79,7 +69,7 @@ Item {
       return
     }
 
-    var svc = root.boundService
+    var svc = root.service
     var err = (svc && svc.lastError) ? String(svc.lastError) : ""
     var q = root.filterText ? String(root.filterText).trim() : ""
     if (!q.length && displayModel.count === 0) {
@@ -98,7 +88,6 @@ Item {
   }
 
   function open(payloadJson) {
-    root.bindService()
     root.opened = true
     root.filterText = ""
     root.selectedIndex = 0
@@ -127,8 +116,7 @@ Item {
   }
 
   function runSearch(query) {
-    root.bindService()
-    var svc = root.boundService
+    var svc = root.service
     if (svc && typeof svc.search === "function") {
       root.statusText = "Searching GFN catalog…"
       svc.search(query)
@@ -179,7 +167,7 @@ Item {
       appStore: row.appStore,
       title: row.title
     }
-    var svc = root.service()
+    var svc = root.service
     if (!row.cmsId || !row.gameId) {
       root.statusText = "“" + row.title + "” has no cmsId yet — resolve from GraphQL catalog"
       return
@@ -195,9 +183,9 @@ Item {
   }
 
   Connections {
-    target: root.boundService
+    target: root.service
     function onLastActionChanged() {
-      var svc = root.boundService
+      var svc = root.service
       if (!svc)
         return
       if (svc.lastAction === "search:pending")
@@ -206,7 +194,7 @@ Item {
         root.applyResults(svc.lastResults || [], false)
     }
     function onLastResultsChanged() {
-      var svc = root.boundService
+      var svc = root.service
       if (!svc || svc.lastAction !== "search:done")
         return
       root.applyResults(svc.lastResults || [], false)
@@ -215,10 +203,15 @@ Item {
 
   ListModel { id: displayModel }
 
-  OverlayWindow {
+  PanelWindow {
     id: panel
-    shown: root.opened
+    visible: root.opened
+    anchors { top: true; bottom: true; left: true; right: true }
+    color: "transparent"
     WlrLayershell.namespace: "matt-dance-gfn"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
 
     Rectangle {
       anchors.fill: parent
