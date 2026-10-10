@@ -179,7 +179,7 @@ Item {
     }
     if (svc && typeof svc.addToApps === "function") {
       if (svc.addToApps(game))
-        root.statusText = "Writing Apps launcher for “" + row.title + "” (Flatpak --url-route)"
+        root.statusText = "Added “" + game.title + "” to Gaming → GeForce NOW (and Apps)"
       else
         root.statusText = svc.lastError || "Could not write .desktop entry"
     } else {

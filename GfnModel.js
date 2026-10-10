@@ -23,7 +23,7 @@ function diabloFallback() {
       appStore: "STEAM",
       boxArt: "",
       title: "Diablo IV",
-      subtitle: "STEAM · cmsId 102670811 · shortName (empty)"
+      subtitle: "Steam · GFN · cmsId 102670811 · shortName (empty)"
     }
   ]
 }
@@ -39,9 +39,17 @@ function enrichRow(row) {
   var subtitle = String(r.subtitle || "")
   if (!subtitle.length) {
     var sn = shortName.length ? shortName : "(empty)"
-    var store = appStore.length ? (appStore + " · ") : ""
+    var storePretty = appStore
+    var su = appStore.toUpperCase()
+    if (su === "STEAM") storePretty = "Steam"
+    else if (su === "BATTLENET") storePretty = "Battle.net"
+    else if (su === "EPIC") storePretty = "Epic"
+    else if (su === "GOG") storePretty = "GOG"
+    else if (su === "UPLAY" || su === "UBISOFT") storePretty = "Ubisoft"
+    // Store first — overlay ElideRight was clipping store off long titles.
+    var store = storePretty.length ? (storePretty + " · ") : ""
     subtitle = cmsId.length
-      ? (store + "cmsId " + cmsId + " · shortName " + sn)
+      ? (store + "GFN · cmsId " + cmsId + " · shortName " + sn)
       : "Missing cmsId"
   }
   return {
@@ -153,27 +161,19 @@ function writeDesktopEntryCommand(scriptPath, game) {
 }
 
 /**
- * Proven CEF Flatpak launch (same shape as gfn-play-diablo-iv).
- * Resolves NV_* driver envs at runtime via bash.
+ * Launch via scripts/gfn-play.sh (busy-guard + proven CEF Flatpak path).
+ * playScriptPath should be absolute under the installed plugin dir.
  * Requires cmsId + id (parentGameId). shortName may be empty.
  */
-function launchCommand(game) {
+function launchCommand(playScriptPath, game) {
   var g = game || {}
-  var cmsId = String(g.cmsId || "")
-  var parentGameId = String(g.id || g.parentGameId || "")
-  var shortName = effectiveShortName(g.shortName)
-  var route = "#?cmsId=" + cmsId +
-    "&launchSource=External&shortName=" + shortName +
-    "&parentGameId=" + parentGameId
-  // Quote for bash single-quoted string: only ' needs escaping as '\'' 
-  var routeQuoted = String(route).replace(/'/g, "'\\''")
-  var script =
-    'nv_host="$(flatpak --gl-drivers 2>/dev/null | grep -Eo \'^nvidia-[0-9-]+\' | head -n 1)"; ' +
-    'exec flatpak run --user ' +
-    '--command=/app/cef/GeForceNOW --cwd=/app/cef ' +
-    '${nv_host:+--env=NV_HOST_DRIVER_VERSION="$nv_host"} ' +
-    '${nv_host:+--env=NV_FLATPAK_DRIVER_VERSION="$nv_host"} ' +
-    'com.nvidia.geforcenow ' +
-    '--url-route=\'' + routeQuoted + '\''
-  return ["bash", "-c", script]
+  var argv = [
+    "bash",
+    String(playScriptPath),
+    "--cms-id", String(g.cmsId || ""),
+    "--parent-game-id", String(g.id || g.parentGameId || ""),
+    "--short-name", effectiveShortName(g.shortName),
+    "--title", String(g.title || "GeForce NOW game")
+  ]
+  return argv
 }

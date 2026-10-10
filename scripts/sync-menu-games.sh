@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Rewrite the // gfn-games:start … // gfn-games:end block inside the user's
 # omarchy-menu.jsonc from ~/.local/share/matt-dance.gfn/games.json.
-# Rows live under gaming.geforce-now.* and are labeled as GeForce NOW / GFN.
+# Rows live under gaming.geforce-now.* — store name first so ElideRight
+# does not clip Steam / Epic / Battle.net.
 
 set -euo pipefail
 
@@ -29,6 +30,16 @@ if os.path.isfile(path):
     except Exception:
         games = []
 
+STORE = {
+    "STEAM": "Steam",
+    "BATTLENET": "Battle.net",
+    "EPIC": "Epic",
+    "GOG": "GOG",
+    "UPLAY": "Ubisoft",
+    "UBISOFT": "Ubisoft",
+    "EA": "EA",
+}
+
 def slug(title, store, cms):
     base = re.sub(r"[^a-z0-9]+", "-", (title or "").lower()).strip("-")
     store = re.sub(r"[^a-z0-9]+", "-", (store or "").lower()).strip("-")
@@ -42,17 +53,18 @@ def esc(s):
 lines = []
 for g in games:
     title = str(g.get("title") or "GeForce NOW Game")
-    store = str(g.get("appStore") or "").strip()
+    raw_store = str(g.get("appStore") or "").strip()
+    store = STORE.get(raw_store.upper(), raw_store or "GFN")
     cms = str(g.get("cmsId") or "")
     desktop = str(g.get("desktop") or "")
     if not cms or not desktop:
         continue
-    key = "gaming.geforce-now." + slug(title, store, cms)
-    label = f"{title} · GFN"
-    desc = f"GeForce NOW · {store}" if store else "GeForce NOW"
-    aliases = ["gfn", "geforce now", f"{title} gfn"]
-    if store:
-        aliases.append(store.lower())
+    key = "gaming.geforce-now." + slug(title, raw_store, cms)
+    # Store FIRST in the visible label — menu rows ElideRight and were
+    # clipping "… · STEAM" / "Battle.net" off long titles.
+    label = f"{store} · {title}"
+    desc = "GeForce NOW · GFN"
+    aliases = ["gfn", "geforce now", f"{title} gfn", store.lower(), raw_store.lower()]
     obj = {
         "icon": "󰢹",
         "label": label,

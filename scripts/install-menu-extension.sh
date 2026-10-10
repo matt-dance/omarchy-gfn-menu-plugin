@@ -100,7 +100,9 @@ extract_sample_body() {
 
   # Body = everything between first and last line; drop full-line //
   # comments and blank lines so the managed block is just the keys.
+  # Keep // gfn-games:* markers — sync-menu-games.sh rewrites that region.
   sed '1d;$d' "$tmp" | awk '
+    /^[[:space:]]*\/\/ gfn-games:/ { print; next }
     /^[[:space:]]*\/\// { next }
     /^[[:space:]]*$/ { next }
     { print }

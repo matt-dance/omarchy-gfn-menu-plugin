@@ -127,21 +127,26 @@ if [[ -n "$BOX_ART_URL" ]]; then
   rm -f "$tmp_img"
 fi
 
-nv_host="$(flatpak --gl-drivers 2>/dev/null | grep -Eo '^nvidia-[0-9-]+' | head -n 1 || true)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLAY_SCRIPT="${SCRIPT_DIR}/gfn-play.sh"
+# Desktop Exec: double-quote args (desktop-file-validate rejects bash '' quoting).
+dq() { escape_exec_quoted "$1"; }
+EXEC_LINE="bash \"$(dq "$PLAY_SCRIPT")\" --cms-id \"$(dq "$CMS_ID")\" --parent-game-id \"$(dq "$PARENT_GAME_ID")\" --short-name \"$(dq "$SHORT_NAME")\" --title \"$(dq "$GAME_TITLE")\""
 
-URL_ROUTE="#?cmsId=${CMS_ID}&launchSource=External&shortName=${SHORT_NAME}&parentGameId=${PARENT_GAME_ID}"
-ROUTE_QUOTED="$(escape_exec_quoted "--url-route=${URL_ROUTE}")"
-
-EXEC_LINE="flatpak run --user --command=/app/cef/GeForceNOW --cwd=/app/cef"
-if [[ -n "$nv_host" ]]; then
-  EXEC_LINE+=" --env=NV_HOST_DRIVER_VERSION=${nv_host}"
-  EXEC_LINE+=" --env=NV_FLATPAK_DRIVER_VERSION=${nv_host}"
-fi
-EXEC_LINE+=" com.nvidia.geforcenow \"${ROUTE_QUOTED}\""
-
-# Apps grid + menu identity: always mark as GFN / GeForce NOW.
-if [[ -n "$APP_STORE" ]]; then
-  DISPLAY_NAME="$(escape_desktop_string "${GAME_TITLE} · GFN (${APP_STORE})")"
+# Apps grid identity: store-first so names stay readable when truncated.
+STORE_PRETTY="$(printf '%s' "$APP_STORE" | tr '[:lower:]' '[:upper:]')"
+case "$STORE_PRETTY" in
+  STEAM) STORE_PRETTY="Steam" ;;
+  BATTLENET) STORE_PRETTY="Battle.net" ;;
+  EPIC) STORE_PRETTY="Epic" ;;
+  GOG) STORE_PRETTY="GOG" ;;
+  UPLAY|UBISOFT) STORE_PRETTY="Ubisoft" ;;
+  EA) STORE_PRETTY="EA" ;;
+  "") STORE_PRETTY="" ;;
+esac
+if [[ -n "$STORE_PRETTY" ]]; then
+  DISPLAY_NAME="$(escape_desktop_string "${STORE_PRETTY} · ${GAME_TITLE} · GFN")"
+  COMMENT="$(escape_desktop_string "${STORE_PRETTY} · GeForce NOW")"
 else
   DISPLAY_NAME="$(escape_desktop_string "${GAME_TITLE} · GFN")"
 fi
