@@ -52,7 +52,8 @@ Item {
         appStore: String(row.appStore || ""),
         boxArt: String(row.boxArt || ""),
         title: String(row.title || ""),
-        subtitle: String(row.subtitle || "")
+        subtitle: String(row.subtitle || ""),
+        alreadyAdded: !!row.alreadyAdded
       })
     }
 
@@ -170,10 +171,20 @@ Item {
       shortName: String((src && src.shortName) || (listRow && listRow.shortName) || ""),
       appStore: String((src && src.appStore) || (listRow && listRow.appStore) || ""),
       boxArt: String((src && src.boxArt) || (listRow && listRow.boxArt) || ""),
-      title: String((src && src.title) || (listRow && listRow.title) || "")
+      title: String((src && src.title) || (listRow && listRow.title) || ""),
+      alreadyAdded: !!(src && src.alreadyAdded) || !!(listRow && listRow.alreadyAdded)
     }
     var label = GfnModel.addLabel(game)
     var svc = root.service
+    if (GfnModel.isAlreadyAdded(game)) {
+      // Keep row visible; do not re-add. notify-send "Already added".
+      root.statusText = "game already added — " + label
+      if (svc && typeof svc.notifyAlreadyAdded === "function")
+        svc.notifyAlreadyAdded(game)
+      else if (svc && typeof svc.notifySend === "function")
+        svc.notifySend("Already added", label)
+      return
+    }
     if (!game.cmsId || !game.id) {
       root.statusText = "“" + label + "” has no cmsId yet — resolve from GraphQL catalog"
       return
@@ -200,6 +211,8 @@ Item {
       else if (svc.lastAction === "addToApps:done") {
         var okLabel = svc.lastAddLabel || "game"
         root.statusText = "Added " + okLabel + " to GeForce NOW"
+      } else if (svc.lastAction === "addToApps:already") {
+        root.statusText = "game already added — " + (svc.lastAddLabel || "game")
       } else if (svc.lastAction === "addToApps:failed") {
         root.statusText = svc.lastError || ("Could not add " + (svc.lastAddLabel || "game"))
       }
@@ -352,6 +365,7 @@ Item {
             required property string boxArt
             required property string title
             required property string subtitle
+            required property bool alreadyAdded
 
             readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
 

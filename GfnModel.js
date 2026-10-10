@@ -8,11 +8,12 @@
  * Offline Diablo IV row (proven Steam variant). Used when the catalog
  * helper cannot reach network or cache.
  *
- * Each row: { id, cmsId, shortName, title, subtitle, appStore }
+ * Each row: { id, cmsId, shortName, title, subtitle, appStore, alreadyAdded? }
  *   id        — catalog UUID → parentGameId
  *   cmsId     — *variant* CMS id (Steam preferred; not top-level GFNDB id)
  *   shortName — variant slug; empty is valid for --url-route
  *   appStore  — STEAM / BATTLENET / …
+ *   alreadyAdded — true when game+store is already in games.json / desktops
  */
 function diabloFallback() {
   return [
@@ -23,7 +24,8 @@ function diabloFallback() {
       appStore: "STEAM",
       boxArt: "",
       title: "Diablo IV",
-      subtitle: "Steam · GFN · cmsId 102670811 · shortName (empty)"
+      subtitle: "Steam · GFN · cmsId 102670811 · shortName (empty)",
+      alreadyAdded: false
     }
   ]
 }
@@ -55,6 +57,13 @@ function addLabel(game) {
   return store.length ? (store + " · " + title) : title
 }
 
+function isAlreadyAdded(row) {
+  var r = row || {}
+  if (r.alreadyAdded === true || r.alreadyAdded === 1 || r.alreadyAdded === "true")
+    return true
+  return false
+}
+
 function enrichRow(row) {
   var r = row || {}
   var id = String(r.id || r.parentGameId || "")
@@ -63,8 +72,12 @@ function enrichRow(row) {
   var appStore = String(r.appStore || "")
   var boxArt = String(r.boxArt || "")
   var title = String(r.title || "")
+  var alreadyAdded = isAlreadyAdded(r)
   var subtitle = String(r.subtitle || "")
-  if (!subtitle.length) {
+  // Matt UX: already-added game+store stays visible with this status line.
+  if (alreadyAdded) {
+    subtitle = "game already added"
+  } else if (!subtitle.length) {
     var sn = shortName.length ? shortName : "(empty)"
     var storePretty = humanizeStore(appStore)
     // Store first — overlay ElideRight was clipping store off long titles.
@@ -80,7 +93,8 @@ function enrichRow(row) {
     appStore: appStore,
     boxArt: boxArt,
     title: title,
-    subtitle: subtitle
+    subtitle: subtitle,
+    alreadyAdded: alreadyAdded
   }
 }
 
