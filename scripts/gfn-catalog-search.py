@@ -4,8 +4,12 @@
 Uses unauthenticated GraphQL pagination against games.geforce.com (US/en_US).
 Does NOT call authenticated searchQuery or library APIs.
 
+Already-added store variants (from games.json) are omitted: match by cmsId or
+(parentGameId + appStore). Other stores for the same title still appear.
+
 Usage:
   gfn-catalog-search.py [query] [--limit N] [--refresh] [--cache-dir DIR]
+                        [--games-catalog PATH]
 
 Stdout: JSON array of {id, cmsId, title, shortName, appStore}
   cmsId is a *variant* id (Steam preferred), not the top-level GFNDB-style id.
@@ -78,8 +82,66 @@ def default_cache_dir() -> Path:
     return home / ".cache" / "matt-dance.gfn"
 
 
+def default_games_catalog() -> Path:
+    """Installed desktop catalog written by write-desktop-entry.sh."""
+    xdg = os.environ.get("XDG_DATA_HOME")
+    if xdg:
+        return Path(xdg) / "matt-dance.gfn" / "games.json"
+    return Path.home() / ".local" / "share" / "matt-dance.gfn" / "games.json"
+
+
 def cache_path(cache_dir: Path) -> Path:
     return cache_dir / f"apps-{COUNTRY}-{LANGUAGE}-{CACHE_VERSION}.json"
+
+
+def load_installed_keys(catalog_path: Path) -> tuple[set[str], set[tuple[str, str]]]:
+    """Keys for variants already in the local desktop catalog.
+
+    Returns (cmsIds, {(parentGameId, APPSTORE)}). A search row is hidden when
+    its cmsId matches, or when parentGameId + appStore both match — so other
+    stores for the same title still appear.
+    """
+    cms_ids: set[str] = set()
+    parent_stores: set[tuple[str, str]] = set()
+    if not catalog_path.is_file():
+        return cms_ids, parent_stores
+    try:
+        data = json.loads(catalog_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return cms_ids, parent_stores
+    if not isinstance(data, list):
+        return cms_ids, parent_stores
+    for raw in data:
+        if not isinstance(raw, dict):
+            continue
+        cms = str(raw.get("cmsId") or "").strip()
+        if cms:
+            cms_ids.add(cms)
+        parent = str(raw.get("parentGameId") or raw.get("id") or "").strip()
+        store = str(raw.get("appStore") or "").strip().upper()
+        if parent and store:
+            parent_stores.add((parent, store))
+    return cms_ids, parent_stores
+
+
+def exclude_installed(
+    rows: list[dict[str, str]],
+    cms_ids: set[str],
+    parent_stores: set[tuple[str, str]],
+) -> list[dict[str, str]]:
+    if not cms_ids and not parent_stores:
+        return rows
+    out: list[dict[str, str]] = []
+    for row in rows:
+        cms = str(row.get("cmsId") or "").strip()
+        if cms and cms in cms_ids:
+            continue
+        parent = str(row.get("id") or row.get("parentGameId") or "").strip()
+        store = str(row.get("appStore") or "").strip().upper()
+        if parent and store and (parent, store) in parent_stores:
+            continue
+        out.append(row)
+    return out
 
 
 def graphql_url(after: str | None) -> str:
@@ -274,12 +336,20 @@ def title_matches(title: str, query: str) -> bool:
     return i == len(q_tokens)
 
 
-def filter_items(items: list[dict[str, str]], query: str, limit: int) -> list[dict[str, str]]:
+def filter_items(
+    items: list[dict[str, str]],
+    query: str,
+    limit: int,
+    *,
+    cms_ids: set[str] | None = None,
+    parent_stores: set[tuple[str, str]] | None = None,
+) -> list[dict[str, str]]:
     q = query.strip()
     # Empty query → no rows (overlay prompts the user to type a title).
     if not q:
         return []
     matched = [row for row in items if title_matches(row["title"], q)]
+    matched = exclude_installed(matched, cms_ids or set(), parent_stores or set())
     return matched[:limit]
 
 
@@ -330,6 +400,13 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Cache directory (default: $XDG_CACHE_HOME/matt-dance.gfn)",
     )
+    parser.add_argument(
+        "--games-catalog",
+        type=Path,
+        default=None,
+        help="Installed games.json to hide already-added store variants "
+        "(default: $XDG_DATA_HOME/matt-dance.gfn/games.json)",
+    )
     args = parser.parse_args(argv)
 
     if args.limit < 1:
@@ -337,11 +414,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     cache_dir = args.cache_dir if args.cache_dir is not None else default_cache_dir()
+    games_path = args.games_catalog if args.games_catalog is not None else default_games_catalog()
+    cms_ids, parent_stores = load_installed_keys(games_path)
     items, source = resolve_catalog(cache_dir, refresh=args.refresh)
-    results = filter_items(items, args.query, args.limit)
+    results = filter_items(
+        items,
+        args.query,
+        args.limit,
+        cms_ids=cms_ids,
+        parent_stores=parent_stores,
+    )
 
     print(
-        f"gfn-catalog-search: source={source} catalog={len(items)} matches={len(results)}",
+        f"gfn-catalog-search: source={source} catalog={len(items)} "
+        f"matches={len(results)} installed={len(cms_ids)}",
         file=sys.stderr,
     )
     # Machine-readable results only on stdout (single JSON value).

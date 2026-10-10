@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove a GeForce NOW Menu game: desktop entry, icon, catalog row, menu sync.
+# Remove one or more GeForce NOW Menu games: desktop, icon, catalog, menu sync.
 # Intended for: omarchy-launch-floating-terminal-with-presentation …
 
 set -euo pipefail
@@ -42,67 +42,125 @@ if [[ ${#CHOICES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-PICK="$(printf '%s\n' "${CHOICES[@]}" | gum choose --header "Remove which GeForce NOW game?" --height 15)" || {
+mapfile -t PICKS < <(
+  printf '%s\n' "${CHOICES[@]}" | gum choose --no-limit \
+    --header "Remove GeForce NOW games (space to toggle, enter to confirm)" \
+    --height 15
+) || {
   echo "Cancelled."
   exit 0
 }
 
-CMS_ID="$(printf '%s' "$PICK" | sed -n 's/.*\[\([0-9][0-9]*\)\]$/\1/p')"
-if [[ -z "$CMS_ID" ]]; then
-  echo "Could not parse selection: $PICK" >&2
-  exit 1
-fi
-
-LABEL="${PICK% \[*}"
-if ! gum confirm "Remove “${LABEL}” from the GeForce NOW menu and Apps?"; then
+if [[ ${#PICKS[@]} -eq 0 ]]; then
   echo "Cancelled."
   exit 0
 fi
 
-python3 - "$CATALOG" "$CMS_ID" <<'PY'
+CMS_IDS=()
+LABELS=()
+for pick in "${PICKS[@]}"; do
+  cms="$(printf '%s' "$pick" | sed -n 's/.*\[\([0-9][0-9]*\)\]$/\1/p')"
+  if [[ -z "$cms" ]]; then
+    echo "Could not parse selection: $pick" >&2
+    exit 1
+  fi
+  CMS_IDS+=("$cms")
+  LABELS+=("${pick% \[*}")
+done
+
+COUNT="${#CMS_IDS[@]}"
+if [[ "$COUNT" -eq 1 ]]; then
+  CONFIRM_MSG="Remove “${LABELS[0]}” from the GeForce NOW menu and Apps?"
+else
+  CONFIRM_MSG="Remove ${COUNT} GeForce NOW games from the menu and Apps?"$'\n'
+  for label in "${LABELS[@]}"; do
+    CONFIRM_MSG+="  • ${label}"$'\n'
+  done
+fi
+
+if ! gum confirm "$CONFIRM_MSG"; then
+  echo "Cancelled."
+  exit 0
+fi
+
+REMOVED_JSON="$(python3 - "$CATALOG" "${CMS_IDS[@]}" <<'PY'
 import json, os, sys
 from pathlib import Path
 
 catalog = Path(sys.argv[1])
-cms = sys.argv[2]
+want = {str(x) for x in sys.argv[2:]}
 games = json.loads(catalog.read_text(encoding="utf-8"))
 keep = []
-removed = None
+removed = []
 for g in games:
-    if str(g.get("cmsId") or "") == cms:
-        removed = g
+    cms = str(g.get("cmsId") or "")
+    if cms in want:
+        removed.append(g)
     else:
         keep.append(g)
-if removed is None:
-    print(f"No catalog row for cmsId={cms}", file=sys.stderr)
+missing = sorted(want - {str(g.get("cmsId") or "") for g in removed})
+if missing:
+    print(f"No catalog row for cmsId={','.join(missing)}", file=sys.stderr)
     sys.exit(1)
 catalog.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-desktop = Path(str(removed.get("desktop") or ""))
-icon = Path(str(removed.get("icon") or ""))
-# Prefer canonical paths from cmsId when catalog paths are stale.
 apps = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "applications"
 icons = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons" / "gfn"
-cand_desktop = apps / f"gfn-{cms}.desktop"
-cand_icon = icons / f"gfn-{cms}.png"
-for path in (desktop, cand_desktop):
-    if path.is_file():
-        path.unlink()
-        print(f"removed {path}")
-for path in (icon, cand_icon):
-    if path.is_file() and str(path).startswith(str(icons)):
-        path.unlink()
-        print(f"removed {path}")
-print(f"removed catalog row cmsId={cms}")
+for g in removed:
+    cms = str(g.get("cmsId") or "")
+    desktop = Path(str(g.get("desktop") or ""))
+    icon = Path(str(g.get("icon") or ""))
+    # Prefer canonical paths from cmsId when catalog paths are stale.
+    cand_desktop = apps / f"gfn-{cms}.desktop"
+    cand_icon = icons / f"gfn-{cms}.png"
+    for path in (desktop, cand_desktop):
+        if path.is_file():
+            path.unlink()
+            print(f"removed {path}", file=sys.stderr)
+    for path in (icon, cand_icon):
+        if path.is_file() and str(path).startswith(str(icons)):
+            path.unlink()
+            print(f"removed {path}", file=sys.stderr)
+    print(f"removed catalog row cmsId={cms}", file=sys.stderr)
+
+# Machine-readable labels for notify / summary (stdout only).
+STORE = {
+    "STEAM": "Steam",
+    "BATTLENET": "Battle.net",
+    "EPIC": "Epic",
+    "GOG": "GOG",
+    "UPLAY": "Ubisoft",
+    "UBISOFT": "Ubisoft",
+    "EA": "EA",
+}
+labels = []
+for g in removed:
+    title = str(g.get("title") or "Game")
+    store = STORE.get(str(g.get("appStore") or "").upper(), str(g.get("appStore") or "GFN"))
+    labels.append(f"{store} · {title}")
+print(json.dumps(labels, ensure_ascii=False))
 PY
+)"
 
 if [[ -x "${SCRIPT_DIR}/sync-menu-games.sh" ]]; then
   "${SCRIPT_DIR}/sync-menu-games.sh"
 fi
 
-echo "Done. “${LABEL}” removed from GeForce NOW Menu / Apps."
+SUMMARY="$(python3 -c 'import json,sys; labels=json.loads(sys.argv[1]); print(", ".join(labels))' "$REMOVED_JSON")"
+if [[ "$COUNT" -eq 1 ]]; then
+  echo "Done. “${LABELS[0]}” removed from GeForce NOW Menu / Apps."
+  NOTIFY_BODY="${LABELS[0]}"
+else
+  echo "Done. Removed ${COUNT} GeForce NOW games: ${SUMMARY}"
+  NOTIFY_BODY="${COUNT} games: ${SUMMARY}"
+fi
+
 if command -v notify-send >/dev/null 2>&1; then
-  notify-send -a "GeForce NOW Menu" "Removed GFN game" "$LABEL" || true
+  if [[ "$COUNT" -eq 1 ]]; then
+    notify-send -a "GeForce NOW Menu" "Removed GFN game" "$NOTIFY_BODY" || true
+  else
+    notify-send -a "GeForce NOW Menu" "Removed GFN games" "$NOTIFY_BODY" || true
+  fi
 fi
 # Keep the floating terminal readable for a moment when launched from the menu.
 if [[ -t 0 ]] && command -v gum >/dev/null 2>&1; then
