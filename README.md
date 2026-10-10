@@ -18,9 +18,9 @@ Setup → Plugins on this Omarchy build lists a name and an id. It does not draw
 
 ![Search overlay for Diablo IV. Steam is already on the menu. Battle.net shows the store.](docs/screenshots/searching.png)
 
-![Gaming → GeForce NOW, with added games named GFN - Title.](docs/screenshots/added-game.png)
+![Apps menu row for the added game, with the Diablo IV box art from the desktop icon.](docs/screenshots/added-game.png)
 
-The store is the menu row's `description` and the desktop `Comment`. While you browse, this Omarchy menu draws the title only. It draws a second line only while the menu filter is active, and that line is the menu path, not the store. The store subtitle shows on the search result, as in the first shot.
+The box art is the desktop `Icon`. The Apps menu draws that image. Gaming → GeForce NOW rows only get a font glyph, so they cannot show the box art. The store is the menu row's `description` and the desktop `Comment`. While you browse, this Omarchy menu draws the title only. It draws a second line only while the menu filter is active, and that line is the menu path, not the store. The store subtitle shows on the search result, as in the first shot.
 
 Search, add, multi-remove, and direct launch work. Search fetches and caches the public GraphQL apps list (`games.geforce.com/graphql`, US/`en_US`, TTL ~6h) and filters locally by title. This repo does not invent authenticated GFN search or library APIs. A game that is already on the menu still appears in search, with the subtitle `game already added`, and Enter does not add it again. Menu and desktop names are `GFN - <Game Name>`, with the store as the subtitle. Launch goes through `scripts/gfn-play.sh`. Offline or cache failure falls back to Diablo IV.
 
@@ -230,7 +230,7 @@ Also remove any Games rows (or the `BEGIN`/`END matt-dance.gfn-omarchy` managed 
 │   └── gfn-example.desktop.example   # Diablo IV example
 ├── docs/screenshots/
 │   ├── searching.png          # search overlay
-│   └── added-game.png         # Gaming → GeForce NOW
+│   └── added-game.png         # Apps menu row with the desktop box art
 ├── HANDOFF.md               # launch facts and machine constraints
 ├── PLAN.md                  # original design
 ├── LICENSE                  # MIT
