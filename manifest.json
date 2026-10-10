@@ -6,6 +6,7 @@
   "author": "Matt Dance",
   "license": "MIT",
   "description": "Search GeForce NOW and add titles as native Omarchy Apps launchers.",
+  "preview": "preview.png",
   "kinds": ["overlay", "service"],
   "keepLoaded": true,
   "entryPoints": {
