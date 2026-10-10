@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Diablo IV
+GenericName=Diablo IV on GeForce NOW
+Comment=Play Diablo IV on GeForce NOW (Steam)
+Exec=/home/mdance/.local/bin/gfn-play-diablo-iv
+Icon=/home/mdance/.local/share/icons/gfn/diablo-iv.png
+StartupWMClass=GeForceNOW
+Categories=Game;
+Keywords=diablo;geforce;gfn;battlenet;
+Terminal=false
+StartupNotify=true

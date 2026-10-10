@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Open Diablo IV in the official GeForce NOW flatpak.
+# Steam variant (cmsId 102670811). parentGameId is the catalog game.
+# /app/bin/GeForceNOW is NVIDIA's update wrapper. It keeps --no-relaunch and
+# drops every other argument, so the route has to go to the CEF client.
+# Snapshot of ~/.local/bin/gfn-play-diablo-iv as of 2026-10-01.
+# The live script on the machine is the one the menu runs.
+nv_host="$(flatpak --gl-drivers 2>/dev/null | grep -Eo '^nvidia-[0-9-]+' | head -n 1)"
+exec flatpak run --user \
+  --command=/app/cef/GeForceNOW \
+  --cwd=/app/cef \
+  ${nv_host:+--env=NV_HOST_DRIVER_VERSION="$nv_host"} \
+  ${nv_host:+--env=NV_FLATPAK_DRIVER_VERSION="$nv_host"} \
+  com.nvidia.geforcenow \
+  --url-route='#?cmsId=102670811&launchSource=External&shortName=&parentGameId=d32c9410-62cb-45cf-9c53-740bb92d4a2d'
