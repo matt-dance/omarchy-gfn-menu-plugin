@@ -109,7 +109,7 @@ extract_sample_body() {
 }
 
 # Keys we consider "already present" for the skip-without-markers path.
-SAMPLE_KEYS=("games.gfn-search")
+SAMPLE_KEYS=("gaming.geforce-now.search" "games.gfn-search")
 
 keys_already_present() {
   local file="$1"

@@ -139,9 +139,11 @@ if [[ -n "$nv_host" ]]; then
 fi
 EXEC_LINE+=" com.nvidia.geforcenow \"${ROUTE_QUOTED}\""
 
-DISPLAY_NAME="$SAFE_TITLE"
+# Apps grid + menu identity: always mark as GFN / GeForce NOW.
 if [[ -n "$APP_STORE" ]]; then
-  DISPLAY_NAME="$(escape_desktop_string "${GAME_TITLE} (${APP_STORE})")"
+  DISPLAY_NAME="$(escape_desktop_string "${GAME_TITLE} · GFN (${APP_STORE})")"
+else
+  DISPLAY_NAME="$(escape_desktop_string "${GAME_TITLE} · GFN")"
 fi
 
 cat >"$DESKTOP_PATH" <<EOF

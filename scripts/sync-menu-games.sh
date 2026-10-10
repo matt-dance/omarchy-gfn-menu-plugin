@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Rewrite the // gfn-games:start … // gfn-games:end block inside the user's
 # omarchy-menu.jsonc from ~/.local/share/matt-dance.gfn/games.json.
-# Safe: only replaces that marked region; leaves the rest of the file alone.
+# Rows live under gaming.geforce-now.* and are labeled as GeForce NOW / GFN.
 
 set -euo pipefail
 
-PLUGIN_ID="matt-dance.gfn"
 STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/matt-dance.gfn"
 CATALOG="${STATE_DIR}/games.json"
 TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/extensions/omarchy-menu.jsonc"
@@ -37,42 +36,53 @@ def slug(title, store, cms):
     parts = [p for p in (base[:40], store, cms[-8:] if cms else "") if p]
     return "-".join(parts) or "game"
 
+def esc(s):
+    return json.dumps(s, ensure_ascii=False)[1:-1]
+
 lines = []
 for g in games:
     title = str(g.get("title") or "GeForce NOW Game")
-    store = str(g.get("appStore") or "")
+    store = str(g.get("appStore") or "").strip()
     cms = str(g.get("cmsId") or "")
     desktop = str(g.get("desktop") or "")
     if not cms or not desktop:
         continue
-    key = "games.gfn-" + slug(title, store, cms)
-    label = title if not store else f"{title} ({store})"
-    # Escape JSON string values.
-    def esc(s):
-        return json.dumps(s, ensure_ascii=False)[1:-1]
-    action = f"gtk-launch {os.path.basename(desktop)}"
-    desc = store if store else "GeForce NOW"
-    lines.append(
-        f'  "{esc(key)}": {{"icon":"","label":"{esc(label)}","description":"{esc(desc)}","action":"{esc(action)}"}},'
-    )
+    key = "gaming.geforce-now." + slug(title, store, cms)
+    label = f"{title} · GFN"
+    desc = f"GeForce NOW · {store}" if store else "GeForce NOW"
+    aliases = ["gfn", "geforce now", f"{title} gfn"]
+    if store:
+        aliases.append(store.lower())
+    obj = {
+        "icon": "󰢹",
+        "label": label,
+        "description": desc,
+        "aliases": aliases,
+        "action": f"gtk-launch {os.path.basename(desktop)}",
+    }
+    body = json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    lines.append(f'  "{esc(key)}": {body},')
+
 print("\n".join(lines))
 PY
 )"
 
-BLOCK="${BEGIN}
-${ROWS}
-  ${END}"
-
-python3 - "$TARGET" "$BEGIN" "$END" "$BLOCK" <<'PY'
+python3 - "$TARGET" "$BEGIN" "$END" "$ROWS" <<'PY'
 import sys
 from pathlib import Path
 
 target = Path(sys.argv[1])
-begin, end, block = sys.argv[2], sys.argv[3], sys.argv[4]
+begin, end, rows = sys.argv[2], sys.argv[3], sys.argv[4]
 text = target.read_text(encoding="utf-8")
+
+block = begin + ("\n" + rows if rows.strip() else "\n") + "\n  " + end
+
 if begin in text and end in text:
     pre, rest = text.split(begin, 1)
     _, post = rest.split(end, 1)
+    stripped = pre.rstrip()
+    if stripped.endswith("}") and not stripped.endswith("},"):
+        pre = stripped + ",\n  "
     new = pre + block + post
 else:
     plugin_end = "// END matt-dance.gfn"
@@ -84,6 +94,7 @@ else:
             sys.stderr.write("sync-menu-games: cannot find insertion point\n")
             sys.exit(1)
         new = text[:idx] + "  " + block + "\n" + text[idx:]
+
 target.write_text(new, encoding="utf-8")
 print(f"sync-menu-games: updated {target}")
 PY

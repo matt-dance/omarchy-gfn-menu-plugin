@@ -8,19 +8,26 @@
   //   ~/.config/omarchy/extensions/omarchy-menu.jsonc
   // then run: omarchy menu refresh
   //
-  // There is no first-party per-game "Games" library in Omarchy. This adds a
-  // Games-adjacent submenu with a Search action that summons the plugin overlay.
-  // Per-title launchers should use Apps .desktop entries (see scripts/).
+  // Stock Install → Gaming (`install.gaming`) is the *installer* list.
+  // This adds a separate root Gaming → GeForce NOW tree for search + launch.
 
-  "games": {
-    "icon": "󰊴",
-    "label": "Games",
-    "description": "GeForce NOW and other game launchers"
+  "gaming": {
+    "icon": "",
+    "label": "Gaming",
+    "description": "Play games, including GeForce NOW cloud titles",
+    "aliases": ["games", "gfn", "geforce now"]
   },
-  "games.gfn-search": {
+  "gaming.geforce-now": {
+    "icon": "󰢹",
+    "label": "GeForce NOW",
+    "description": "NVIDIA GeForce NOW cloud games (GFN)",
+    "aliases": ["gfn", "geforce", "nvidia", "cloud gaming"]
+  },
+  "gaming.geforce-now.search": {
     "icon": "󰍉",
     "label": "Search GeForce NOW",
-    "description": "Open the GFN search overlay (plugin: matt-dance.gfn)",
+    "description": "Search the GFN catalog and add a game (plugin: matt-dance.gfn)",
+    "aliases": ["gfn search", "add a game", "add gfn game", "geforce now search"],
     "action": "omarchy-shell shell summon matt-dance.gfn '{}'"
   },
   // gfn-games:start
