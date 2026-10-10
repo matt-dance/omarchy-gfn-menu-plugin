@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Rewrite the // gfn-games:start … // gfn-games:end block inside the user's
 # omarchy-menu.jsonc from ~/.local/share/matt-dance.gfn/games.json.
-# Rows live under gaming.geforce-now.* — store name first so ElideRight
-# does not clip Steam / Epic / Battle.net.
+# Rows live under gaming.geforce-now.* — label "GFN - <title>", description = store.
 
 set -euo pipefail
 
@@ -60,10 +59,9 @@ for g in games:
     if not cms or not desktop:
         continue
     key = "gaming.geforce-now." + slug(title, raw_store, cms)
-    # Store FIRST in the visible label — menu rows ElideRight and were
-    # clipping "… · STEAM" / "Battle.net" off long titles.
-    label = f"{store} · {title}"
-    desc = "GeForce NOW · GFN"
+    # Matt UX: primary "GFN - <Game>"; store as small/subtitle (description).
+    label = f"GFN - {title}"
+    desc = store if store else "GeForce NOW"
     aliases = []
     for a in ["gfn", "geforce now", f"{title} gfn", store.lower(), raw_store.lower()]:
         if a and a not in aliases:

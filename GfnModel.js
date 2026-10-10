@@ -24,7 +24,7 @@ function diabloFallback() {
       appStore: "STEAM",
       boxArt: "",
       title: "Diablo IV",
-      subtitle: "Steam · GFN · cmsId 102670811 · shortName (empty)",
+      subtitle: "Steam",
       alreadyAdded: false
     }
   ]
@@ -48,13 +48,21 @@ function humanizeStore(appStore) {
 }
 
 /**
- * Label used in overlay status + notify: "Steam · Diablo IV".
+ * Primary list/menu label: "GFN - Diablo IV".
  */
-function addLabel(game) {
+function primaryLabel(game) {
   var g = game || {}
   var title = String(g.title || "game").trim() || "game"
-  var store = humanizeStore(g.appStore)
-  return store.length ? (store + " · " + title) : title
+  if (title.indexOf("GFN - ") === 0)
+    return title
+  return "GFN - " + title
+}
+
+/**
+ * Label used in overlay status + notify: "GFN - Diablo IV".
+ */
+function addLabel(game) {
+  return primaryLabel(game)
 }
 
 function isAlreadyAdded(row) {
@@ -73,18 +81,14 @@ function enrichRow(row) {
   var boxArt = String(r.boxArt || "")
   var title = String(r.title || "")
   var alreadyAdded = isAlreadyAdded(r)
+  var storePretty = humanizeStore(appStore)
+  var displayTitle = primaryLabel({ title: title })
   var subtitle = String(r.subtitle || "")
-  // Matt UX: already-added game+store stays visible with this status line.
+  // Matt UX: already-added stays visible; otherwise store is the small print.
   if (alreadyAdded) {
     subtitle = "game already added"
   } else if (!subtitle.length) {
-    var sn = shortName.length ? shortName : "(empty)"
-    var storePretty = humanizeStore(appStore)
-    // Store first — overlay ElideRight was clipping store off long titles.
-    var store = storePretty.length ? (storePretty + " · ") : ""
-    subtitle = cmsId.length
-      ? (store + "GFN · cmsId " + cmsId + " · shortName " + sn)
-      : "Missing cmsId"
+    subtitle = storePretty.length ? storePretty : (cmsId.length ? ("cmsId " + cmsId) : "GeForce NOW")
   }
   return {
     id: id,
@@ -92,7 +96,7 @@ function enrichRow(row) {
     shortName: shortName,
     appStore: appStore,
     boxArt: boxArt,
-    title: title,
+    title: displayTitle,
     subtitle: subtitle,
     alreadyAdded: alreadyAdded
   }
