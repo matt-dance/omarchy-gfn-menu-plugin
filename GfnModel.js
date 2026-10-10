@@ -125,24 +125,30 @@ function markAlreadyAdded(rows, addedCmsIds) {
   var out = []
   for (var i = 0; i < list.length; i++) {
     var src = list[i] || {}
-    // Drop stale mark so remove → re-search clears the status.
+    // Preserve catalog-search alreadyAdded=true even if games.json map
+    // has not loaded yet (Service.refreshCatalog is async).
+    var fromSearch = src.alreadyAdded === true
+      || src.alreadyAdded === 1
+      || src.alreadyAdded === "true"
     var clean = {}
     for (var k in src)
       clean[k] = src[k]
-    clean.alreadyAdded = false
+    // Drop stale subtitle mark so remove → re-search clears the status.
     var sub0 = String(clean.subtitle || "")
     if (sub0.indexOf("Already added · ") === 0)
       clean.subtitle = sub0.slice("Already added · ".length)
     else if (sub0 === "Already added" || sub0 === "game already added")
       clean.subtitle = ""
+    clean.alreadyAdded = fromSearch
     var row = enrichRow(clean)
     var cms = String(row.cmsId || "")
-    var added = !!(cms.length && map[cms])
+    var added = !!(cms.length && map[cms]) || fromSearch || !!row.alreadyAdded
     row.alreadyAdded = added
     if (added) {
       // Keep store/cms details; lead with clear status for the overlay.
       var base = String(row.subtitle || "")
-      row.subtitle = base.length ? ("Already added · " + base) : "Already added"
+      if (base.indexOf("Already added") !== 0)
+        row.subtitle = base.length ? ("Already added · " + base) : "Already added"
     }
     out.push(row)
   }
