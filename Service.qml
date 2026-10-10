@@ -21,6 +21,7 @@ Item {
 
   readonly property string writerScript: root.pluginDir + "/scripts/write-desktop-entry.sh"
   readonly property string searchScript: root.pluginDir + "/scripts/gfn-catalog-search.py"
+  readonly property string playScript: root.pluginDir + "/scripts/gfn-play.sh"
 
   property string lastAction: ""
   property string lastError: ""
@@ -82,7 +83,7 @@ Item {
       root.lastError = "launch already running"
       return false
     }
-    launchProcess.command = GfnModel.launchCommand(g)
+    launchProcess.command = GfnModel.launchCommand(root.playScript, g)
     launchProcess.running = true
     return true
   }
