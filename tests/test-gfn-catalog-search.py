@@ -70,6 +70,20 @@ class NormalizeItem(unittest.TestCase):
         self.assertEqual(rows[0]["boxArt"], "https://img.example/box.png")
 
     def test_drops_newline_in_cms_variant(self) -> None:
+        # Parent cmsId is too short to be a launch fallback, so a poisoned
+        # variant must not yield any row.
+        item = self._item(
+            cmsId="123",
+            variants=[
+                {
+                    "id": "102670811\nExec=touch /tmp/pwned",
+                    "shortName": "",
+                    "appStore": "STEAM",
+                }
+            ],
+        )
+        self.assertEqual(catalog.normalize_item(item), [])
+        # If a numeric parent fallback exists, it must still be the allowlisted id.
         item = self._item(
             variants=[
                 {
@@ -79,7 +93,10 @@ class NormalizeItem(unittest.TestCase):
                 }
             ]
         )
-        self.assertEqual(catalog.normalize_item(item), [])
+        rows = catalog.normalize_item(item)
+        for row in rows:
+            self.assertNotIn("\n", row["cmsId"])
+            self.assertTrue(catalog.is_safe_id(row["cmsId"]))
 
     def test_strips_controls_from_title(self) -> None:
         item = self._item(title="Diablo\nExec=touch /tmp/pwned IV")
