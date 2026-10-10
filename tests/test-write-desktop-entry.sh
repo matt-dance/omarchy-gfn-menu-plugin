@@ -42,12 +42,72 @@ run_writer() {
   shift
   mkdir -p "${work}/data" "${work}/config" "${work}/home"
   env -i \
-    PATH="$PATH" \
+    PATH="${work}/bin:${PATH}" \
     HOME="${work}/home" \
     XDG_DATA_HOME="${work}/data" \
     XDG_CONFIG_HOME="${work}/config" \
     TMPDIR="${work}/tmp" \
     bash "$WRITER" "$@"
+}
+
+# Fake curl: copy a fixture to -o/--output. Writer is https-only; no network.
+install_fake_curl() {
+  local work="$1" payload="$2"
+  mkdir -p "${work}/bin"
+  cat >"${work}/bin/curl" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+payload=$(printf '%q' "$payload")
+out=""
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    -o|--output) out="\$2"; shift 2 ;;
+    --) shift; break ;;
+    *) shift ;;
+  esac
+done
+if [[ -z "\$out" ]]; then
+  echo "fake curl: missing -o" >&2
+  exit 2
+fi
+cp -- "\$payload" "\$out"
+EOF
+  chmod +x "${work}/bin/curl"
+}
+
+# Minimal PNG. pixels=None → tiny IDAT; IHDR still declares w×h (bomb case).
+write_png() {
+  local dest="$1" width="$2" height="$3" fill="${4:-}"
+  python3 - "$dest" "$width" "$height" "$fill" <<'PY'
+import binascii, pathlib, struct, sys, zlib
+
+dest, w_s, h_s, fill = sys.argv[1:5]
+w, h = int(w_s), int(h_s)
+
+def chunk(tag: bytes, data: bytes) -> bytes:
+    crc = binascii.crc32(tag + data) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
+if fill:
+    row = b"\x00" + (b"\xff\x00\x00" * w)
+    raw = row * h
+    idat = zlib.compress(raw, 9)
+else:
+    idat = zlib.compress(b"\x00\x00\x00\x00", 9)
+pathlib.Path(dest).write_bytes(
+    b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
+)
+PY
+}
+
+have_imagemagick() {
+  command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1
+}
+
+icon_path() {
+  local work="$1" cms="$2"
+  echo "${work}/data/icons/gfn/gfn-$(printf '%s' "$cms" | tr '[:upper:]' '[:lower:]').png"
 }
 
 desktop_path() {
@@ -251,6 +311,66 @@ for spec in "${title_cases[@]}"; do
   fi
   rm -rf "$work"
 done
+
+# --- box-art: normal image is resized; oversized header is refused ---------
+if ! have_imagemagick; then
+  die "ImageMagick (magick or convert) required for box-art decode tests"
+else
+  work="$(new_work)"
+  mkdir -p "${work}/tmp"
+  write_png "${work}/ok.png" 64 64 fill
+  install_fake_curl "$work" "${work}/ok.png"
+  rc=0
+  run_writer "$work" \
+    --cms-id "$GOOD_CMS" \
+    --parent-game-id "$GOOD_PARENT" \
+    --title "Diablo IV" \
+    --box-art-url "https://img.example.test/ok.png" \
+    --force >/dev/null 2>"${work}/err" || rc=$?
+  file="$(desktop_path "$work" "$GOOD_CMS")"
+  icon="$(icon_path "$work" "$GOOD_CMS")"
+  assert_eq "normal box-art exit" "$rc" "0"
+  assert_safe_desktop "$file" "normal box-art"
+  if [[ -f "$icon" && -s "$icon" ]] && grep -q "^Icon=${icon}$" "$file"; then
+    ok "normal box-art wrote icon"
+  else
+    die "normal box-art missing icon (${icon}): $(grep '^Icon=' "$file" 2>/dev/null || true)"
+  fi
+  rm -rf "$work"
+
+  work="$(new_work)"
+  mkdir -p "${work}/tmp"
+  # 20k×20k in ~70 bytes: under distro 32KP policy, over our 4096 / 16MP cap.
+  write_png "${work}/bomb.png" 20000 20000
+  install_fake_curl "$work" "${work}/bomb.png"
+  rc=0
+  run_writer "$work" \
+    --cms-id "$GOOD_CMS" \
+    --parent-game-id "$GOOD_PARENT" \
+    --title "Diablo IV" \
+    --box-art-url "https://img.example.test/bomb.png" \
+    --force >/dev/null 2>"${work}/err" || rc=$?
+  file="$(desktop_path "$work" "$GOOD_CMS")"
+  icon="$(icon_path "$work" "$GOOD_CMS")"
+  assert_eq "oversize box-art exit" "$rc" "0"
+  assert_safe_desktop "$file" "oversize box-art"
+  if grep -q '^Icon=applications-games$' "$file"; then
+    ok "oversize box-art fell back to default icon"
+  else
+    die "oversize box-art did not fall back: $(grep '^Icon=' "$file" || true)"
+  fi
+  if [[ -e "$icon" ]]; then
+    die "oversize box-art wrote ${icon}"
+  else
+    ok "oversize box-art wrote no icon file"
+  fi
+  if grep -qi 'exceeds decode limits\|20000x20000' "${work}/err"; then
+    ok "oversize box-art warned with dimensions"
+  else
+    die "oversize box-art warning missing dims: $(cat "${work}/err")"
+  fi
+  rm -rf "$work"
+fi
 
 # --- box-art URL injection is ignored; desktop still safe ------------------
 work="$(new_work)"
