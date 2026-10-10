@@ -8,7 +8,7 @@ Installable **Omarchy (Quattro)** plugin that aims to make GeForce NOW titles fe
 > |-------|-------|--------|
 > | Manifest `id` | `matt-dance.gfn` | Provisional — may rename before first public release |
 > | Display `name` | **GeForce NOW Menu** | Locked (user confirmed) |
-> | Public GitHub repo | [`omarchy-gfn-menu-plugin`](https://github.com/matt-dance/omarchy-gfn-menu-plugin) | Default branch `master` |
+> | Repo-oriented name | `gfn-omarchy` | Locked for this project |
 >
 > Display name stays **GeForce NOW Menu**. Before publishing widely you may still pick a permanent namespaced id (for example `io.github.<you>.gfn-omarchy`); if you do, update `manifest.json` `id`, QML summon strings, the sample menu `action`, desktop `X-Omarchy-Plugin`, and this README. Folder under `~/.config/omarchy/plugins/` must match the manifest `id`.
 
@@ -37,14 +37,16 @@ On the Omarchy machine:
 
 ## Install
 
+Once this repository is public (or otherwise cloneable):
+
 ```bash
-omarchy plugin add https://github.com/matt-dance/omarchy-gfn-menu-plugin.git --enable
+omarchy plugin add <git-url-to-this-repo> --enable
 ```
 
 Review-first (lands disabled):
 
 ```bash
-omarchy plugin add https://github.com/matt-dance/omarchy-gfn-menu-plugin.git
+omarchy plugin add <git-url-to-this-repo>
 # inspect ~/.config/omarchy/plugins/matt-dance.gfn/
 omarchy plugin enable matt-dance.gfn
 ```

@@ -21,10 +21,38 @@ function diabloFallback() {
       cmsId: "102670811",
       shortName: "",
       appStore: "STEAM",
+      boxArt: "",
       title: "Diablo IV",
-      subtitle: "Steam · cmsId 102670811 · shortName (empty)"
+      subtitle: "Steam · GFN · cmsId 102670811 · shortName (empty)"
     }
   ]
+}
+
+/**
+ * Humanize catalog appStore codes for UI / notify-send (Steam not STEAM).
+ */
+function humanizeStore(appStore) {
+  var su = String(appStore || "").trim().toUpperCase()
+  if (su === "STEAM") return "Steam"
+  if (su === "BATTLENET") return "Battle.net"
+  if (su === "EPIC") return "Epic"
+  if (su === "GOG") return "GOG"
+  if (su === "UPLAY" || su === "UBISOFT") return "Ubisoft"
+  if (su === "EA") return "EA"
+  if (!su.length) return ""
+  // Title-case unknown store tokens.
+  return String(appStore || "").charAt(0).toUpperCase()
+    + String(appStore || "").slice(1).toLowerCase()
+}
+
+/**
+ * Label used in overlay status + notify: "Steam · Diablo IV".
+ */
+function addLabel(game) {
+  var g = game || {}
+  var title = String(g.title || "game").trim() || "game"
+  var store = humanizeStore(g.appStore)
+  return store.length ? (store + " · " + title) : title
 }
 
 function enrichRow(row) {
@@ -33,13 +61,16 @@ function enrichRow(row) {
   var cmsId = String(r.cmsId || "")
   var shortName = String(r.shortName || "")
   var appStore = String(r.appStore || "")
+  var boxArt = String(r.boxArt || "")
   var title = String(r.title || "")
   var subtitle = String(r.subtitle || "")
   if (!subtitle.length) {
     var sn = shortName.length ? shortName : "(empty)"
-    var store = appStore.length ? (appStore + " · ") : ""
+    var storePretty = humanizeStore(appStore)
+    // Store first — overlay ElideRight was clipping store off long titles.
+    var store = storePretty.length ? (storePretty + " · ") : ""
     subtitle = cmsId.length
-      ? (store + "cmsId " + cmsId + " · shortName " + sn)
+      ? (store + "GFN · cmsId " + cmsId + " · shortName " + sn)
       : "Missing cmsId"
   }
   return {
@@ -47,6 +78,7 @@ function enrichRow(row) {
     cmsId: cmsId,
     shortName: shortName,
     appStore: appStore,
+    boxArt: boxArt,
     title: title,
     subtitle: subtitle
   }
@@ -141,31 +173,28 @@ function writeDesktopEntryCommand(scriptPath, game) {
   // Always pass --short-name so an empty catalog value stays empty
   // (writer must not invent game_gfn_pc).
   argv.push("--short-name", effectiveShortName(g.shortName))
+  // Always pass store + box art when present so overlay adds keep icons/labels.
+  argv.push("--app-store", String(g.appStore || ""))
+  var box = String(g.boxArt || "")
+  if (box.length)
+    argv.push("--box-art-url", box)
   return argv
 }
 
 /**
- * Proven CEF Flatpak launch (same shape as gfn-play-diablo-iv).
- * Resolves NV_* driver envs at runtime via bash.
+ * Launch via scripts/gfn-play.sh (busy-guard + proven CEF Flatpak path).
+ * playScriptPath should be absolute under the installed plugin dir.
  * Requires cmsId + id (parentGameId). shortName may be empty.
  */
-function launchCommand(game) {
+function launchCommand(playScriptPath, game) {
   var g = game || {}
-  var cmsId = String(g.cmsId || "")
-  var parentGameId = String(g.id || g.parentGameId || "")
-  var shortName = effectiveShortName(g.shortName)
-  var route = "#?cmsId=" + cmsId +
-    "&launchSource=External&shortName=" + shortName +
-    "&parentGameId=" + parentGameId
-  // Quote for bash single-quoted string: only ' needs escaping as '\'' 
-  var routeQuoted = String(route).replace(/'/g, "'\\''")
-  var script =
-    'nv_host="$(flatpak --gl-drivers 2>/dev/null | grep -Eo \'^nvidia-[0-9-]+\' | head -n 1)"; ' +
-    'exec flatpak run --user ' +
-    '--command=/app/cef/GeForceNOW --cwd=/app/cef ' +
-    '${nv_host:+--env=NV_HOST_DRIVER_VERSION="$nv_host"} ' +
-    '${nv_host:+--env=NV_FLATPAK_DRIVER_VERSION="$nv_host"} ' +
-    'com.nvidia.geforcenow ' +
-    '--url-route=\'' + routeQuoted + '\''
-  return ["bash", "-c", script]
+  var argv = [
+    "bash",
+    String(playScriptPath),
+    "--cms-id", String(g.cmsId || ""),
+    "--parent-game-id", String(g.id || g.parentGameId || ""),
+    "--short-name", effectiveShortName(g.shortName),
+    "--title", String(g.title || "GeForce NOW game")
+  ]
+  return argv
 }

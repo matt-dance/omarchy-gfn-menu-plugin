@@ -47,7 +47,7 @@ TTL_SECONDS = 6 * 60 * 60  # ~6h
 DEFAULT_LIMIT = 40
 USER_AGENT = "matt-dance.gfn-catalog-search/0.1 (+Omarchy plugin)"
 # Bump when row shape / cmsId selection changes (invalidates old caches).
-CACHE_VERSION = "v2"
+CACHE_VERSION = "v3"
 
 # Proven Steam variant (HANDOFF / gfn-play-diablo-iv). Offline fallback only.
 DIABLO_IV_FALLBACK = [
@@ -57,13 +57,16 @@ DIABLO_IV_FALLBACK = [
         "title": "Diablo IV",
         "shortName": "",
         "appStore": "STEAM",
+        "boxArt": "",
     }
 ]
 
 APPS_QUERY = (
     "{{ apps(country:\"{country}\", language:\"{language}\"{after_arg}) "
     "{{ pageInfo {{ hasNextPage endCursor }} "
-    "items {{ id cmsId title type variants {{ id shortName appStore }} }} }} }}"
+    "items {{ id cmsId title type "
+    "images {{ GAME_BOX_ART }} "
+    "variants {{ id shortName appStore }} }} }} }}"
 )
 
 
@@ -107,72 +110,75 @@ def _is_gfn_cms_id(value: str) -> bool:
     return bool(value) and value.isdigit() and len(value) >= 8
 
 
-def pick_launch_variant(
+def _store_sort_key(store: str) -> int:
+    s = str(store or "").upper()
+    order = {"STEAM": 0, "BATTLENET": 1, "EPIC": 2, "GOG": 3, "UBISOFT": 4, "EA": 5}
+    return order.get(s, 9)
+
+
+def _box_art_url(item: dict[str, Any]) -> str:
+    images = item.get("images")
+    if isinstance(images, dict):
+        url = images.get("GAME_BOX_ART") or images.get("KEY_ART") or ""
+        return str(url).strip()
+    return str(item.get("boxArt") or "").strip()
+
+
+def launchable_variants(
     variants: list[dict[str, Any]] | None,
     parent_cms_id: str,
-) -> tuple[str, str, str]:
-    """Return (cmsId, shortName, appStore).
+) -> list[tuple[str, str, str]]:
+    """Return [(cmsId, shortName, appStore), ...] for every launchable store.
 
-    Prefer a STEAM variant whose id is a real GFN cmsId. Fall back to any
-    long-id variant, then to the top-level parent cmsId (older catalog rows
-    where variant.id is a short store stub).
+    Prefer real long GFN variant ids. If none qualify, fall back to a single
+    row using the parent cmsId (older catalog shapes).
     """
     variants = [v for v in (variants or []) if isinstance(v, dict)]
-    if not variants:
-        return parent_cms_id, "", ""
-
-    def store_key(v: dict[str, Any]) -> int:
-        store = str(v.get("appStore") or "").upper()
-        if store == "STEAM":
-            return 0
-        if store == "BATTLENET":
-            return 1
-        return 2
-
-    ordered = sorted(variants, key=store_key)
-
-    for v in ordered:
+    out: list[tuple[str, str, str]] = []
+    for v in sorted(variants, key=lambda x: _store_sort_key(str(x.get("appStore") or ""))):
         vid = _variant_id(v)
-        if _is_gfn_cms_id(vid):
-            return vid, str(v.get("shortName") or "").strip(), str(v.get("appStore") or "")
+        if not _is_gfn_cms_id(vid):
+            continue
+        out.append((vid, str(v.get("shortName") or "").strip(), str(v.get("appStore") or "")))
+    if out:
+        return out
+    if _is_gfn_cms_id(parent_cms_id):
+        store = ""
+        short = ""
+        if variants:
+            preferred = sorted(variants, key=lambda x: _store_sort_key(str(x.get("appStore") or "")))[0]
+            store = str(preferred.get("appStore") or "")
+            short = str(preferred.get("shortName") or "").strip()
+        return [(parent_cms_id, short, store)]
+    return []
 
-    for v in variants:
-        vid = _variant_id(v)
-        if _is_gfn_cms_id(vid):
-            return vid, str(v.get("shortName") or "").strip(), str(v.get("appStore") or "")
 
-    # No long variant id — keep parent cmsId; still surface preferred store metadata.
-    preferred = ordered[0]
-    return (
-        parent_cms_id,
-        str(preferred.get("shortName") or "").strip(),
-        str(preferred.get("appStore") or ""),
-    )
-
-
-def normalize_item(item: dict[str, Any]) -> dict[str, str] | None:
+def normalize_item(item: dict[str, Any]) -> list[dict[str, str]]:
+    """Expand one catalog title into one row per launchable store variant."""
     item_id = item.get("id")
     title = item.get("title")
     if not item_id or not title:
-        return None
-    # Prefer GAME rows when type is present; keep unknown types (older payloads).
+        return []
     item_type = item.get("type")
     if item_type is not None and str(item_type).upper() not in ("GAME", ""):
-        return None
+        return []
 
     parent_cms = item.get("cmsId")
     parent_cms_str = str(parent_cms).strip() if parent_cms is not None else ""
-    cms_id, short_name, app_store = pick_launch_variant(item.get("variants"), parent_cms_str)
-    if not cms_id:
-        return None
-
-    return {
-        "id": str(item_id),
-        "cmsId": cms_id,
-        "title": str(title),
-        "shortName": short_name,
-        "appStore": app_store,
-    }
+    box_art = _box_art_url(item)
+    rows: list[dict[str, str]] = []
+    for cms_id, short_name, app_store in launchable_variants(item.get("variants"), parent_cms_str):
+        rows.append(
+            {
+                "id": str(item_id),
+                "cmsId": cms_id,
+                "title": str(title),
+                "shortName": short_name,
+                "appStore": app_store,
+                "boxArt": box_art,
+            }
+        )
+    return rows
 
 
 def fetch_catalog() -> list[dict[str, str]]:
@@ -184,9 +190,7 @@ def fetch_catalog() -> list[dict[str, str]]:
         apps = (payload.get("data") or {}).get("apps") or {}
         page_items = apps.get("items") or []
         for raw in page_items:
-            row = normalize_item(raw or {})
-            if row:
-                items.append(row)
+            items.extend(normalize_item(raw or {}))
         page_info = apps.get("pageInfo") or {}
         if not page_info.get("hasNextPage"):
             break
@@ -205,6 +209,7 @@ def row_from_cache_dict(raw: dict[str, Any]) -> dict[str, str] | None:
         "title": str(raw.get("title") or ""),
         "shortName": str(raw.get("shortName") or ""),
         "appStore": str(raw.get("appStore") or ""),
+        "boxArt": str(raw.get("boxArt") or ""),
     }
     if row["id"] and row["cmsId"] and row["title"]:
         return row

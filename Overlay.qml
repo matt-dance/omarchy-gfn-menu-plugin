@@ -14,6 +14,8 @@ Item {
   property var shell: null
   property var manifest: null
   property var pluginRegistry: null
+  // Injected by omarchy-shell for overlay+service plugins (do not shadow with a function).
+  property var service: null
 
   property bool opened: false
   property string filterText: ""
@@ -21,7 +23,6 @@ Item {
   property bool cursorActive: false
   property var results: []
   property string statusText: "GFN catalog search — type a title, then Enter (cache TTL ~6h)"
-  property var boundService: null
 
   property color background: Color.menu.background
   property color foreground: Color.menu.text
@@ -39,17 +40,6 @@ Item {
   property int cardHeight: Math.min(Style.space(420), panel.height - Style.gapsOut * 2)
   property int rowHeight: Math.max(Style.space(44), Style.font.title + Style.spacing.md)
 
-  function service() {
-    if (!root.pluginRegistry || typeof root.pluginRegistry.getService !== "function")
-      return null
-    var id = (root.manifest && root.manifest.id) ? root.manifest.id : "matt-dance.gfn"
-    return root.pluginRegistry.getService(id)
-  }
-
-  function bindService() {
-    root.boundService = root.service()
-  }
-
   function applyResults(rows, pending) {
     root.results = rows || []
     displayModel.clear()
@@ -60,6 +50,7 @@ Item {
         cmsId: String(row.cmsId || ""),
         shortName: String(row.shortName || ""),
         appStore: String(row.appStore || ""),
+        boxArt: String(row.boxArt || ""),
         title: String(row.title || ""),
         subtitle: String(row.subtitle || "")
       })
@@ -79,7 +70,7 @@ Item {
       return
     }
 
-    var svc = root.boundService
+    var svc = root.service
     var err = (svc && svc.lastError) ? String(svc.lastError) : ""
     var q = root.filterText ? String(root.filterText).trim() : ""
     if (!q.length && displayModel.count === 0) {
@@ -98,7 +89,6 @@ Item {
   }
 
   function open(payloadJson) {
-    root.bindService()
     root.opened = true
     root.filterText = ""
     root.selectedIndex = 0
@@ -127,8 +117,7 @@ Item {
   }
 
   function runSearch(query) {
-    root.bindService()
-    var svc = root.boundService
+    var svc = root.service
     if (svc && typeof svc.search === "function") {
       root.statusText = "Searching GFN catalog…"
       svc.search(query)
@@ -171,42 +160,52 @@ Item {
   function activateIndex(index) {
     if (index < 0 || index >= displayModel.count)
       return
-    var row = displayModel.get(index)
+    // Prefer root.results (enriched catalog rows). ListModel.get() has dropped
+    // appStore/boxArt under Quickshell even when those roles were appended.
+    var src = (root.results && root.results.length > index) ? root.results[index] : null
+    var listRow = displayModel.get(index)
     var game = {
-      id: row.gameId,
-      cmsId: row.cmsId,
-      shortName: row.shortName,
-      appStore: row.appStore,
-      title: row.title
+      id: String((src && (src.id || src.gameId)) || (listRow && listRow.gameId) || ""),
+      cmsId: String((src && src.cmsId) || (listRow && listRow.cmsId) || ""),
+      shortName: String((src && src.shortName) || (listRow && listRow.shortName) || ""),
+      appStore: String((src && src.appStore) || (listRow && listRow.appStore) || ""),
+      boxArt: String((src && src.boxArt) || (listRow && listRow.boxArt) || ""),
+      title: String((src && src.title) || (listRow && listRow.title) || "")
     }
-    var svc = root.service()
-    if (!row.cmsId || !row.gameId) {
-      root.statusText = "“" + row.title + "” has no cmsId yet — resolve from GraphQL catalog"
+    var label = GfnModel.addLabel(game)
+    var svc = root.service
+    if (!game.cmsId || !game.id) {
+      root.statusText = "“" + label + "” has no cmsId yet — resolve from GraphQL catalog"
       return
     }
     if (svc && typeof svc.addToApps === "function") {
-      if (svc.addToApps(game))
-        root.statusText = "Writing Apps launcher for “" + row.title + "” (Flatpak --url-route)"
-      else
-        root.statusText = svc.lastError || "Could not write .desktop entry"
+      root.statusText = "Adding " + label + "…"
+      if (!svc.addToApps(game))
+        root.statusText = svc.lastError || ("Could not add " + label)
     } else {
       root.statusText = "Service unavailable — cannot write .desktop entry"
     }
   }
 
   Connections {
-    target: root.boundService
+    target: root.service
     function onLastActionChanged() {
-      var svc = root.boundService
+      var svc = root.service
       if (!svc)
         return
       if (svc.lastAction === "search:pending")
         root.statusText = "Searching GFN catalog…"
       else if (svc.lastAction === "search:done")
         root.applyResults(svc.lastResults || [], false)
+      else if (svc.lastAction === "addToApps:done") {
+        var okLabel = svc.lastAddLabel || "game"
+        root.statusText = "Added " + okLabel + " to GeForce NOW"
+      } else if (svc.lastAction === "addToApps:failed") {
+        root.statusText = svc.lastError || ("Could not add " + (svc.lastAddLabel || "game"))
+      }
     }
     function onLastResultsChanged() {
-      var svc = root.boundService
+      var svc = root.service
       if (!svc || svc.lastAction !== "search:done")
         return
       root.applyResults(svc.lastResults || [], false)
@@ -215,10 +214,15 @@ Item {
 
   ListModel { id: displayModel }
 
-  OverlayWindow {
+  PanelWindow {
     id: panel
-    shown: root.opened
+    visible: root.opened
+    anchors { top: true; bottom: true; left: true; right: true }
+    color: "transparent"
     WlrLayershell.namespace: "matt-dance-gfn"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
 
     Rectangle {
       anchors.fill: parent
@@ -265,18 +269,18 @@ Item {
             root.select(1)
             event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            // Enter submits catalog search when there is a query and nothing
-            // to activate yet. With results + cursor, Enter writes the Apps
-            // .desktop (activateIndex). Previously cursorActive was forced
-            // true while typing, so Enter always hit activateIndex(0) on an
-            // empty model and silently returned — "Enter does nothing".
+            // Dual-mode Enter:
+            //   • results visible → always activate/add the selected row
+            //   • no results + query → catalog search
+            // Requiring cursorActive made post-search Enter look like a no-op
+            // (only enabled the highlight, or re-ran search).
             var q = root.filterText ? String(root.filterText).trim() : ""
-            if (displayModel.count > 0 && root.cursorActive) {
+            if (displayModel.count > 0) {
+              if (!root.cursorActive)
+                root.cursorActive = true
               root.activateIndex(root.selectedIndex)
             } else if (q.length) {
               root.runSearch(q)
-            } else if (displayModel.count > 0) {
-              root.cursorActive = true
             } else {
               root.statusText = "Type a title, then press Enter to search"
             }
@@ -345,6 +349,7 @@ Item {
             required property string cmsId
             required property string shortName
             required property string appStore
+            required property string boxArt
             required property string title
             required property string subtitle
 
