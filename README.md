@@ -6,13 +6,13 @@ Installable **Omarchy (Quattro)** plugin that aims to make GeForce NOW titles fe
 >
 > | Field | Value | Status |
 > |-------|-------|--------|
-> | Manifest `id` | `matt-dance.gfn` | Provisional — may rename before first public release |
-> | Display `name` | **GeForce NOW Menu** | Locked (user confirmed) |
-> | Repo-oriented name | `gfn-omarchy` | Locked for this project |
->
-> Display name stays **GeForce NOW Menu**. Before publishing widely you may still pick a permanent namespaced id (for example `io.github.<you>.gfn-omarchy`); if you do, update `manifest.json` `id`, QML summon strings, the sample menu `action`, desktop `X-Omarchy-Plugin`, and this README. Folder under `~/.config/omarchy/plugins/` must match the manifest `id`.
+> | Manifest `id` | `matt-dance.gfn-omarchy` | Locked |
+> | Display `name` | **GeForce NOW Menu** | Locked |
+> | Repo-oriented name | `gfn-omarchy` | Locked |
 
-Status: **scaffold with Flatpak launch + v1 catalog search**. Search fetches/caches the public GraphQL apps list (`games.geforce.com/graphql`, US/`en_US`, TTL ~6h) and filters locally by title — this repo does **not** invent authenticated GFN search/library APIs. Offline / cache failure falls back to Diablo IV.
+The plugin id is `matt-dance.gfn-omarchy`. Omarchy names third-party plugins `author.short-name` (the same shape as `njpatel.omabot`). The install folder is `~/.config/omarchy/plugins/matt-dance.gfn-omarchy` and must match that id. Display name stays **GeForce NOW Menu**.
+
+Search, add, multi-remove, and direct launch work. Search fetches and caches the public GraphQL apps list (`games.geforce.com/graphql`, US/`en_US`, TTL ~6h) and filters locally by title. This repo does not invent authenticated GFN search or library APIs. A game that is already on the menu still appears in search, with the subtitle `game already added`, and Enter does not add it again. Menu and desktop names are `GFN - <Game Name>`, with the store as the subtitle. Launch goes through `scripts/gfn-play.sh`. Offline or cache failure falls back to Diablo IV.
 
 ## Why `overlay` + `service`?
 
@@ -23,9 +23,7 @@ From Omarchy’s Quattro plugin model:
 | **`overlay`** | Fullscreen search UI (same pattern as built-in emoji / clipboard overlays). Summoned from a menu `action:` via `omarchy-shell shell summon`. |
 | **`service`** | Headless singleton for add-to-Apps / Flatpak `--url-route` launch so the overlay stays UI-focused and helpers stay mounted (`keepLoaded: true`). |
 
-`omarchy plugin add` only clones + validates + toggles enablement. It does **not** inject menu rows or write `.desktop` files — those are documented companion steps below.
-
-Conventions / launch research (project agent-store notes): `docs/omarchy-plugin-guide.md`, `docs/project-context.md`, and **`docs/gfn-linux-launch.md`** (Flatpak `--url-route`, GraphQL catalog, Diablo IV cmsId/uuid).
+`omarchy plugin add` only clones, validates, and toggles enablement. It does not inject menu rows or write `.desktop` files. Those are the companion steps below. Launch details and the machine constraints are in [`HANDOFF.md`](HANDOFF.md). The original design is in [`PLAN.md`](PLAN.md).
 
 ## Prerequisites
 
@@ -37,27 +35,25 @@ On the Omarchy machine:
 
 ## Install
 
-Once this repository is public (or otherwise cloneable):
-
 ```bash
-omarchy plugin add <git-url-to-this-repo> --enable
+omarchy plugin add https://github.com/matt-dance/omarchy-gfn-menu-plugin.git --enable
 ```
 
 Review-first (lands disabled):
 
 ```bash
-omarchy plugin add <git-url-to-this-repo>
-# inspect ~/.config/omarchy/plugins/matt-dance.gfn/
-omarchy plugin enable matt-dance.gfn
+omarchy plugin add https://github.com/matt-dance/omarchy-gfn-menu-plugin.git
+# inspect ~/.config/omarchy/plugins/matt-dance.gfn-omarchy/
+omarchy plugin enable matt-dance.gfn-omarchy
 ```
 
 Manual / local checkout:
 
 ```bash
 # from a clone of this repo:
-cp -a . ~/.config/omarchy/plugins/matt-dance.gfn
+cp -a . ~/.config/omarchy/plugins/matt-dance.gfn-omarchy
 omarchy-shell shell rescanPlugins
-omarchy plugin enable matt-dance.gfn
+omarchy plugin enable matt-dance.gfn-omarchy
 ```
 
 Plugins run **unsandboxed** inside `omarchy-shell` as your user. Review code before enabling.
@@ -67,21 +63,21 @@ Plugins run **unsandboxed** inside `omarchy-shell` as your user. Review code bef
 `plugin add` **does not** merge menu JSONC. After `omarchy plugin add … --enable`, install the sample Games rows with the safe helper:
 
 ```bash
-# From a clone, or from ~/.config/omarchy/plugins/matt-dance.gfn/
+# From a clone, or from ~/.config/omarchy/plugins/matt-dance.gfn-omarchy/
 bash scripts/install-menu-extension.sh
 # Preview only:
 bash scripts/install-menu-extension.sh --dry-run
 omarchy menu refresh
 ```
 
-[`scripts/install-menu-extension.sh`](scripts/install-menu-extension.sh) merges [`extensions/omarchy-menu.jsonc`](extensions/omarchy-menu.jsonc) into `~/.config/omarchy/extensions/omarchy-menu.jsonc` inside a managed `BEGIN`/`END matt-dance.gfn` block. It is idempotent (updates the marked block, or skips if the keys are already present), never wipes other user rows, and writes a `*.bak.<timestamp>` backup before changing the file.
+[`scripts/install-menu-extension.sh`](scripts/install-menu-extension.sh) merges [`extensions/omarchy-menu.jsonc`](extensions/omarchy-menu.jsonc) into `~/.config/omarchy/extensions/omarchy-menu.jsonc` inside a managed `BEGIN`/`END matt-dance.gfn-omarchy` block. It is idempotent (updates the marked block, or skips if the keys are already present), never wipes other user rows, and writes a `*.bak.<timestamp>` backup before changing the file.
 
 Manual merge still works: copy the sample keys by hand, keep the file valid JSONC (broken user JSONC silently drops **all** user extension rows), then `omarchy menu refresh`.
 
 The sample action summons the overlay:
 
 ```bash
-omarchy-shell shell summon matt-dance.gfn '{}'
+omarchy-shell shell summon matt-dance.gfn-omarchy '{}'
 ```
 
 ## Catalog search (v1)
@@ -90,7 +86,7 @@ Public GraphQL catalog → disk cache → local title filter (no authenticated `
 
 | Path | Purpose |
 |------|---------|
-| [`scripts/gfn-catalog-search.py`](scripts/gfn-catalog-search.py) | Paginate `https://games.geforce.com/graphql`, cache under `$XDG_CACHE_HOME/matt-dance.gfn/` (TTL ~6h), filter by title |
+| [`scripts/gfn-catalog-search.py`](scripts/gfn-catalog-search.py) | Paginate `https://games.geforce.com/graphql`, cache under `$XDG_CACHE_HOME/matt-dance.gfn-omarchy/` (TTL ~6h), filter by title |
 | `Service.qml` → `search()` | Runs the helper via Quickshell `Process`; Overlay watches `lastResults` |
 | Offline fallback | Diablo IV row if network and cache both fail |
 
@@ -98,7 +94,7 @@ Public GraphQL catalog → disk cache → local title filter (no authenticated `
 # From a checkout (or the installed plugin dir):
 python3 scripts/gfn-catalog-search.py "Diablo IV"
 # → JSON array: [{id, cmsId, title, shortName}, ...]
-# Cache file: ${XDG_CACHE_HOME:-$HOME/.cache}/matt-dance.gfn/apps-US-en_US.json
+# Cache file: ${XDG_CACHE_HOME:-$HOME/.cache}/matt-dance.gfn-omarchy/apps-US-en_US.json
 # Force refetch:  python3 scripts/gfn-catalog-search.py "Diablo IV" --refresh
 ```
 
@@ -112,7 +108,7 @@ This plugin ships:
 
 | Path | Purpose |
 |------|---------|
-| [`scripts/write-desktop-entry.sh`](scripts/write-desktop-entry.sh) | Writes `~/.local/share/applications/gfn-<parent-game-id>.desktop` with proven CEF `Exec=` |
+| [`scripts/write-desktop-entry.sh`](scripts/write-desktop-entry.sh) | Writes `~/.local/share/applications/gfn-<cmsId>.desktop`. `Name` is `GFN - <Game Name>`. `Comment` is the store. `Exec` calls `gfn-play.sh`. |
 | [`desktop/gfn-example.desktop.example`](desktop/gfn-example.desktop.example) | Diablo IV example entry (not installed automatically) |
 
 Launch pattern (proven `gfn-play-diablo-iv` / HANDOFF):
@@ -159,7 +155,7 @@ Desktop keys `X-GFN-CmsId`, `X-GFN-ParentGameId`, and `X-GFN-ShortName` carry th
 On an Omarchy host:
 
 ```bash
-PLUGIN_DIR="$HOME/.config/omarchy/plugins/matt-dance.gfn"
+PLUGIN_DIR="$HOME/.config/omarchy/plugins/matt-dance.gfn-omarchy"
 omarchy plugin validate "$PLUGIN_DIR"
 # optional, if qmllint + OMARCHY_PATH are available:
 qmllint -I "$OMARCHY_PATH/shell" \
@@ -172,32 +168,35 @@ Rules worth knowing: namespaced non-`omarchy.*` id, every kind has an entry poin
 
 | Capability | Status |
 |------------|--------|
-| Root `manifest.json` (`schemaVersion` 1, `overlay` + `service`) | Works (layout) |
-| Minimal QML entry points (`Overlay.qml`, `Service.qml`) | Works (UI + IPC shape); needs Omarchy host to run |
-| Sample menu extension snippet | Works as copy/merge source — not auto-applied |
-| Menu extension install helper | Works — `scripts/install-menu-extension.sh` (managed BEGIN/END, backup, dry-run) |
-| `.desktop` writer script | Works — Flatpak `--url-route` `Exec=` + `X-GFN-*` keys |
+| Root `manifest.json` (`schemaVersion` 1, `overlay` + `service`, id `matt-dance.gfn-omarchy`) | Works |
+| Overlay search and service (`Overlay.qml`, `Service.qml`) | Works. Enter adds the selected row. An already-added row notifies and does not write a second launcher. |
+| Gaming menu extension | Works as a copy/merge source. `plugin add` does not apply it. |
+| Menu install helper | Works — `scripts/install-menu-extension.sh` (managed `BEGIN`/`END matt-dance.gfn-omarchy` block, backup, dry-run) |
+| Added-game menu rows | Works — `scripts/sync-menu-games.sh` rewrites the `gfn-games` block. Label `GFN - <Game Name>`, description is the store. |
+| Remove | Works — `scripts/gfn-remove.sh` multi-selects, confirms once, and removes every selected game |
+| Desktop entries | Works — `gfn-<cmsId>.desktop`, `X-GFN-*` keys, `X-Omarchy-Plugin=matt-dance.gfn-omarchy` |
+| Direct launch | Works — `scripts/gfn-play.sh` uses the CEF `--url-route` path. It refuses when a GeForce NOW window is open, clears a leftover process that has no window, and restarts WirePlumber once if audio permissions block the first frame. |
 | Diablo IV launch ids | Proven Steam `cmsId` `102670811` (variant; not top-level `101069911`) |
-| GFN catalog search | **Works** — `scripts/gfn-catalog-search.py` (GraphQL cache + local filter); Diablo IV offline fallback |
-| Auto-merge menu on `plugin add` | **Not supported** by Omarchy — use the install helper (or merge by hand) |
+| Catalog search | Works — `scripts/gfn-catalog-search.py` (GraphQL cache + local filter). Diablo IV is the offline fallback. |
+| Auto-merge menu on `plugin add` | Not supported by Omarchy. Use the install helper, or merge by hand. |
 
-## Renaming the plugin id
+## Changing the plugin id later
 
-Display `name` stays **GeForce NOW Menu**. If you rename only the `id`:
+The id is `matt-dance.gfn-omarchy`. Display `name` stays **GeForce NOW Menu**. A later rename has to touch every copy of the id:
 
-1. Change `id` in [`manifest.json`](manifest.json) — leave `name` as `GeForce NOW Menu`.
+1. Change `id` in [`manifest.json`](manifest.json). Leave `name` as `GeForce NOW Menu`.
 2. Update summon strings in `Overlay.qml`, `Service.qml` fallbacks, and `extensions/omarchy-menu.jsonc`.
-3. Update `X-Omarchy-Plugin` in the writer script / example desktop file.
-4. If already installed: `omarchy plugin remove matt-dance.gfn`, then add again under the new id (folder name must match).
-5. Re-merge menu action to summon the new id.
+3. Update `X-Omarchy-Plugin`, cache and state directories, and the `BEGIN`/`END` marker in the scripts.
+4. On an install that already uses this id: `omarchy plugin remove matt-dance.gfn-omarchy`, then add again under the new id. The folder name must match.
+5. Re-merge the menu action so it summons the new id. Move `~/.local/share/matt-dance.gfn-omarchy/` if added games should carry over.
 
 ## Remove
 
 ```bash
-omarchy plugin remove matt-dance.gfn
+omarchy plugin remove matt-dance.gfn-omarchy
 ```
 
-Also remove any Games rows (or the `BEGIN`/`END matt-dance.gfn` managed block) from `~/.config/omarchy/extensions/omarchy-menu.jsonc`, and any `~/.local/share/applications/gfn-*.desktop` files you no longer want.
+Also remove any Games rows (or the `BEGIN`/`END matt-dance.gfn-omarchy` managed block) from `~/.config/omarchy/extensions/omarchy-menu.jsonc`, and any `~/.local/share/applications/gfn-*.desktop` files you no longer want.
 
 ## Layout
 
@@ -211,15 +210,19 @@ Also remove any Games rows (or the `BEGIN`/`END matt-dance.gfn` managed block) f
 │   └── omarchy-menu.jsonc   # sample Games-adjacent menu rows
 ├── scripts/
 │   ├── gfn-catalog-search.py       # GraphQL fetch/cache + title filter
-│   ├── install-menu-extension.sh   # merge sample Games rows into user JSONC
+│   ├── gfn-play.sh                 # CEF launch, busy window, WirePlumber recovery
+│   ├── gfn-remove.sh               # multi-select remove
+│   ├── sync-menu-games.sh          # rewrite the gfn-games menu block
+│   ├── install-menu-extension.sh   # merge the Gaming → GeForce NOW rows
 │   └── write-desktop-entry.sh
 ├── desktop/
-│   └── gfn-example.desktop.example   # Diablo IV --url-route example
+│   └── gfn-example.desktop.example   # Diablo IV example
+├── HANDOFF.md               # launch facts and machine constraints
+├── PLAN.md                  # original design
 ├── LICENSE                  # MIT
 └── README.md
 ```
 
-Research notes for Flatpak launch + catalog live in the project agent store: `docs/gfn-linux-launch.md`.
 ## License
 
 MIT — see [LICENSE](LICENSE).

@@ -2,7 +2,9 @@
 
 Machine: mdance, Omarchy (Hyprland) on Linux. Home `/home/mdance`. Workspace this folder lives in: `/home/mdance/Work`.
 
-The user likes GeForce NOW on Omarchy and wants a game in the launcher to open inside the GeForce NOW app, close to a native launch. Diablo IV was the trial. It worked. They then asked for a plugin: download it, add a Gaming menu option, search for a game, pick the store they own it on, and have that game appear in the Gaming menu. That design was agreed and saved. Implementation has not started.
+The user likes GeForce NOW on Omarchy and wants a game in the launcher to open inside the GeForce NOW app, close to a native launch. Diablo IV was the trial. It worked. They then asked for a plugin: download it, add a Gaming menu option, search for a game, pick the store they own it on, and have that game appear in the Gaming menu.
+
+That plugin is built. Manifest id: `matt-dance.gfn-omarchy`. Display name: GeForce NOW Menu. Install folder: `~/.config/omarchy/plugins/matt-dance.gfn-omarchy`. Gaming → GeForce NOW searches in an overlay, writes `GFN - <Game Name>` desktop entries, and removes games with a multi-select. Launch is `scripts/gfn-play.sh`, which is the CEF `--url-route` command below.
 
 An earlier question about an FPS overlay for WoW classic beta was dropped. Do not resume it.
 
@@ -99,13 +101,13 @@ The store list is whatever variants the catalog returns. GeForce NOW still check
 Two different surfaces:
 
 - The app grid lists XDG desktop entries and launches them with `uwsm-app -- gtk-launch <id>.desktop` from `/usr/share/omarchy/shell/services/AppLibrary.qml`. Per-game `.desktop` files in `~/.local/share/applications/` are how a game shows up there.
-- The Omarchy menu (the one with Install > Gaming) is JSONC. Defaults: `/usr/share/omarchy/default/omarchy/omarchy-menu.jsonc`. User additions: `~/.config/omarchy/extensions/omarchy-menu.jsonc`. That user file is still the empty comment template. It hot-reloads on save. IDs are object keys. Dotted IDs build the tree (`gaming.geforce-now.add` appears under `gaming.geforce-now`). An entry with `action` is a command. An entry with no action is a submenu.
+- The Omarchy menu (the one with Install > Gaming) is JSONC. Defaults: `/usr/share/omarchy/default/omarchy/omarchy-menu.jsonc`. User additions: `~/.config/omarchy/extensions/omarchy-menu.jsonc`. It hot-reloads on save. IDs are object keys. Dotted IDs build the tree (`gaming.geforce-now.search` appears under `gaming.geforce-now`). An entry with `action` is a command. An entry with no action is a submenu. The plugin's rows live in a `BEGIN`/`END matt-dance.gfn-omarchy` block, and added games live between `// gfn-games:start` and `// gfn-games:end`.
 
 Install > Gaming (`install.gaming.*`) is a list of installers: Steam, RetroArch, Minecraft, NVIDIA GeForce NOW, Xbox Cloud, Xbox Controllers, Battle.net, Lutris, Heroic, RetroArch Game Launcher. Remove > Gaming mirrors it. Those rows are gated with `when`. Playable games need their own `gaming` section so they are not mixed into the installer list.
 
 `omarchy plugin add <git-url> --enable` clones into `~/.config/omarchy/plugins/<id>/` and can enable a shell plugin. Setup > Plugins > Add Plugin already runs that. Plugins are bar widgets, overlays, panels, or services inside the long-running `omarchy-shell` process. They run unsandboxed. A manifest cannot declare menu rows. Menu providers are hardcoded in `/usr/share/omarchy/shell/plugins/menu/Menu.qml` to `fonts`, `power-profiles`, and a QML `apps` provider. Any other `provider` name in the user extension is ignored. Added games have to be static action rows rewritten from a catalog file.
 
-`gum` plus `omarchy-launch-floating-terminal-with-presentation` is how existing Gaming installers ask questions. Use that for search, game pick, and store pick. An overlay plugin is optional later polish. It still needs the menu-extension write.
+Search and add run in the overlay (`omarchy-shell shell summon matt-dance.gfn-omarchy '{}'`). Remove still uses `gum` inside `omarchy-launch-floating-terminal-with-presentation`. The overlay does not replace the menu-extension write. Added games are static action rows.
 
 There is no post-enable hook that writes menu files. The plugin's one-time setup has to insert the Gaming section. After that, only a marked block of generated game rows should be rewritten.
 

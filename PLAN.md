@@ -1,6 +1,6 @@
 # Plan
 
-Status: agreed, not built. Next session should implement this on the machine, then package it.
+Status: built. Plugin id `matt-dance.gfn-omarchy`, display name GeForce NOW Menu. The notes below are the original design. What shipped differs in a few places: search and add are the overlay, not a `gum` `gfn-add`; menu and desktop labels are `GFN - <Game Name>` with the store as the subtitle; remove is multi-select; desktop files are `gfn-<cmsId>.desktop`; launch is `scripts/gfn-play.sh`.
 
 ## Product
 

@@ -111,14 +111,14 @@ if [[ -n "$STORE_LABEL" ]]; then
   COMMENT="$(escape_desktop_string "GeForce NOW · ${APP_STORE}")"
   KEYWORDS="$(escape_desktop_string "GeForce NOW;GFN;${APP_STORE};${STORE_LABEL};")"
 else
-  COMMENT="$(escape_desktop_string "Stream via GeForce NOW (Omarchy plugin matt-dance.gfn)")"
+  COMMENT="$(escape_desktop_string "Stream via GeForce NOW (Omarchy plugin matt-dance.gfn-omarchy)")"
   KEYWORDS="GeForce NOW;GFN;"
 fi
 
 # Download / resize GAME_BOX_ART when provided (ImageMagick).
 if [[ -n "$BOX_ART_URL" ]]; then
   tmp_img="$(mktemp "${TMPDIR:-/tmp}/gfn-boxart.XXXXXX")"
-  if curl -fsSL --max-time 45 -A "matt-dance.gfn-icon/0.1" -o "$tmp_img" "$BOX_ART_URL"; then
+  if curl -fsSL --max-time 45 -A "matt-dance.gfn-omarchy-icon/0.1" -o "$tmp_img" "$BOX_ART_URL"; then
     if magick "$tmp_img" -resize '362x512>' -strip "PNG32:${ICON_PATH}" 2>/dev/null \
       || convert "$tmp_img" -resize '362x512>' -strip "PNG32:${ICON_PATH}" 2>/dev/null; then
       ICON_VALUE="$ICON_PATH"
@@ -173,7 +173,7 @@ X-GFN-CmsId=${CMS_ID}
 X-GFN-ParentGameId=${PARENT_GAME_ID}
 X-GFN-ShortName=${SHORT_NAME}
 X-GFN-AppStore=${APP_STORE}
-X-Omarchy-Plugin=matt-dance.gfn
+X-Omarchy-Plugin=matt-dance.gfn-omarchy
 EOF
 
 # Best-effort refresh of desktop database when available.
@@ -189,7 +189,7 @@ fi
 
 # Record + sync Omarchy menu game rows (marked gfn-games block).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/matt-dance.gfn"
+STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/matt-dance.gfn-omarchy"
 mkdir -p "$STATE_DIR"
 CATALOG="$STATE_DIR/games.json"
 python3 - "$CATALOG" "$CMS_ID" "$PARENT_GAME_ID" "$GAME_TITLE" "$SHORT_NAME" "$APP_STORE" "$DESKTOP_PATH" "$ICON_VALUE" <<'PY'

@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/matt-dance.gfn"
+STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/matt-dance.gfn-omarchy"
 CATALOG="${STATE_DIR}/games.json"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -134,7 +134,7 @@ if apps.is_dir():
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if desktop_kv(text, "X-Omarchy-Plugin") != "matt-dance.gfn":
+        if desktop_kv(text, "X-Omarchy-Plugin") != "matt-dance.gfn-omarchy":
             continue
         if desktop_kv(text, "X-GFN-CmsId") == cms or path.name == f"gfn-{cms}.desktop":
             to_remove.add(path)

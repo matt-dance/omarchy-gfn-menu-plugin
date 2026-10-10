@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Rewrite the // gfn-games:start … // gfn-games:end block inside the user's
-# omarchy-menu.jsonc from ~/.local/share/matt-dance.gfn/games.json.
+# omarchy-menu.jsonc from ~/.local/share/matt-dance.gfn-omarchy/games.json.
 # Rows live under gaming.geforce-now.* — label "GFN - <title>", description = store.
 
 set -euo pipefail
 
-STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/matt-dance.gfn"
+STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/matt-dance.gfn-omarchy"
 CATALOG="${STATE_DIR}/games.json"
 TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/extensions/omarchy-menu.jsonc"
 BEGIN="// gfn-games:start"
@@ -98,7 +98,7 @@ if begin in text and end in text:
         pre = stripped + ",\n  "
     new = pre + block + post
 else:
-    plugin_end = "// END matt-dance.gfn"
+    plugin_end = "// END matt-dance.gfn-omarchy"
     if plugin_end in text:
         new = text.replace(plugin_end, block + "\n  " + plugin_end, 1)
     else:
