@@ -21,8 +21,9 @@ function diabloFallback() {
       cmsId: "102670811",
       shortName: "",
       appStore: "STEAM",
+      boxArt: "",
       title: "Diablo IV",
-      subtitle: "Steam · cmsId 102670811 · shortName (empty)"
+      subtitle: "STEAM · cmsId 102670811 · shortName (empty)"
     }
   ]
 }
@@ -33,6 +34,7 @@ function enrichRow(row) {
   var cmsId = String(r.cmsId || "")
   var shortName = String(r.shortName || "")
   var appStore = String(r.appStore || "")
+  var boxArt = String(r.boxArt || "")
   var title = String(r.title || "")
   var subtitle = String(r.subtitle || "")
   if (!subtitle.length) {
@@ -47,6 +49,7 @@ function enrichRow(row) {
     cmsId: cmsId,
     shortName: shortName,
     appStore: appStore,
+    boxArt: boxArt,
     title: title,
     subtitle: subtitle
   }
@@ -141,6 +144,10 @@ function writeDesktopEntryCommand(scriptPath, game) {
   // Always pass --short-name so an empty catalog value stays empty
   // (writer must not invent game_gfn_pc).
   argv.push("--short-name", effectiveShortName(g.shortName))
+  if (g.appStore)
+    argv.push("--app-store", String(g.appStore))
+  if (g.boxArt)
+    argv.push("--box-art-url", String(g.boxArt))
   return argv
 }
 

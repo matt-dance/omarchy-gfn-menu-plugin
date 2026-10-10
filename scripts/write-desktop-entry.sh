@@ -4,18 +4,16 @@
 #
 # Usage:
 #   write-desktop-entry.sh --cms-id <cmsId> --parent-game-id <uuid> \
-#     --title <display-name> [--short-name <slug>] [--force]
+#     --title <display-name> [--short-name <slug>] [--app-store <STORE>] \
+#     [--box-art-url <url>] [--force]
 #
 # --short-name may be empty (proven Diablo IV launcher uses empty shortName).
 # Do not invent game_gfn_pc.
 #
-# Output path:
-#   ~/.local/share/applications/gfn-<sanitized-parent-game-id>.desktop
-#
-# Exec= matches the proven CEF launch from HANDOFF / gfn-play-diablo-iv:
-#   flatpak run --user --command=/app/cef/GeForceNOW --cwd=/app/cef
-#     --env=NV_HOST_DRIVER_VERSION=… --env=NV_FLATPAK_DRIVER_VERSION=…
-#     com.nvidia.geforcenow --url-route='#?cmsId=…&launchSource=External&shortName=&parentGameId=…'
+# Output path (one file per store variant):
+#   ~/.local/share/applications/gfn-<cmsId>.desktop
+# Icon (when --box-art-url is set):
+#   ~/.local/share/icons/gfn/gfn-<cmsId>.png
 
 set -euo pipefail
 
@@ -23,6 +21,8 @@ CMS_ID=""
 PARENT_GAME_ID=""
 SHORT_NAME=""
 GAME_TITLE=""
+APP_STORE=""
+BOX_ART_URL=""
 FORCE=0
 
 while [[ $# -gt 0 ]]; do
@@ -41,6 +41,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --title)
       GAME_TITLE="${2:-}"
+      shift 2
+      ;;
+    --app-store)
+      APP_STORE="${2:-}"
+      shift 2
+      ;;
+    --box-art-url)
+      BOX_ART_URL="${2:-}"
       shift 2
       ;;
     --force)
@@ -63,15 +71,18 @@ if [[ -z "$CMS_ID" || -z "$PARENT_GAME_ID" || -z "$GAME_TITLE" ]]; then
   exit 2
 fi
 
-# Sanitize for a stable desktop filename (keep alnum, dash, underscore, dot).
-SAFE_ID="$(printf '%s' "$PARENT_GAME_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
-if [[ -z "$SAFE_ID" ]]; then
-  SAFE_ID="unknown"
+# One desktop file per variant cmsId so Steam vs Battle.net can coexist.
+SAFE_CMS="$(printf '%s' "$CMS_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
+if [[ -z "$SAFE_CMS" ]]; then
+  SAFE_CMS="unknown"
 fi
 
 APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-mkdir -p "$APPS_DIR"
-DESKTOP_PATH="$APPS_DIR/gfn-${SAFE_ID}.desktop"
+ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/gfn"
+mkdir -p "$APPS_DIR" "$ICON_DIR"
+DESKTOP_PATH="$APPS_DIR/gfn-${SAFE_CMS}.desktop"
+ICON_PATH="$ICON_DIR/gfn-${SAFE_CMS}.png"
+ICON_VALUE="applications-games"
 
 if [[ -e "$DESKTOP_PATH" && "$FORCE" -ne 1 ]]; then
   echo "Exists (use --force to overwrite): $DESKTOP_PATH" >&2
@@ -91,6 +102,30 @@ escape_exec_quoted() {
 }
 
 SAFE_TITLE="$(escape_desktop_string "$GAME_TITLE")"
+STORE_LABEL="$(printf '%s' "$APP_STORE" | tr '[:upper:]' '[:lower:]')"
+if [[ -n "$STORE_LABEL" ]]; then
+  COMMENT="$(escape_desktop_string "GeForce NOW · ${APP_STORE}")"
+  KEYWORDS="$(escape_desktop_string "GeForce NOW;GFN;${APP_STORE};${STORE_LABEL};")"
+else
+  COMMENT="$(escape_desktop_string "Stream via GeForce NOW (Omarchy plugin matt-dance.gfn)")"
+  KEYWORDS="GeForce NOW;GFN;"
+fi
+
+# Download / resize GAME_BOX_ART when provided (ImageMagick).
+if [[ -n "$BOX_ART_URL" ]]; then
+  tmp_img="$(mktemp "${TMPDIR:-/tmp}/gfn-boxart.XXXXXX")"
+  if curl -fsSL --max-time 45 -A "matt-dance.gfn-icon/0.1" -o "$tmp_img" "$BOX_ART_URL"; then
+    if magick "$tmp_img" -resize '362x512>' -strip "PNG32:${ICON_PATH}" 2>/dev/null \
+      || convert "$tmp_img" -resize '362x512>' -strip "PNG32:${ICON_PATH}" 2>/dev/null; then
+      ICON_VALUE="$ICON_PATH"
+    else
+      echo "warning: could not resize box art for $CMS_ID" >&2
+    fi
+  else
+    echo "warning: could not download box art for $CMS_ID" >&2
+  fi
+  rm -f "$tmp_img"
+fi
 
 nv_host="$(flatpak --gl-drivers 2>/dev/null | grep -Eo '^nvidia-[0-9-]+' | head -n 1 || true)"
 
@@ -104,22 +139,29 @@ if [[ -n "$nv_host" ]]; then
 fi
 EXEC_LINE+=" com.nvidia.geforcenow \"${ROUTE_QUOTED}\""
 
+DISPLAY_NAME="$SAFE_TITLE"
+if [[ -n "$APP_STORE" ]]; then
+  DISPLAY_NAME="$(escape_desktop_string "${GAME_TITLE} (${APP_STORE})")"
+fi
+
 cat >"$DESKTOP_PATH" <<EOF
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=${SAFE_TITLE}
+Name=${DISPLAY_NAME}
 GenericName=${SAFE_TITLE} on GeForce NOW
-Comment=Stream via GeForce NOW (Omarchy plugin matt-dance.gfn)
+Comment=${COMMENT}
 Exec=${EXEC_LINE}
-Icon=applications-games
+Icon=${ICON_VALUE}
 StartupWMClass=GeForceNOW
 Categories=Game;
+Keywords=${KEYWORDS}
 Terminal=false
 StartupNotify=true
 X-GFN-CmsId=${CMS_ID}
 X-GFN-ParentGameId=${PARENT_GAME_ID}
 X-GFN-ShortName=${SHORT_NAME}
+X-GFN-AppStore=${APP_STORE}
 X-Omarchy-Plugin=matt-dance.gfn
 EOF
 
@@ -132,6 +174,41 @@ if command -v desktop-file-validate >/dev/null 2>&1; then
   if ! desktop-file-validate "$DESKTOP_PATH"; then
     echo "warning: desktop-file-validate reported issues for $DESKTOP_PATH" >&2
   fi
+fi
+
+# Record + sync Omarchy menu game rows (marked gfn-games block).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/matt-dance.gfn"
+mkdir -p "$STATE_DIR"
+CATALOG="$STATE_DIR/games.json"
+python3 - "$CATALOG" "$CMS_ID" "$PARENT_GAME_ID" "$GAME_TITLE" "$SHORT_NAME" "$APP_STORE" "$DESKTOP_PATH" "$ICON_VALUE" <<'PY'
+import json, os, sys
+path, cms, parent, title, short, store, desktop, icon = sys.argv[1:9]
+games = []
+if os.path.isfile(path):
+    try:
+        games = json.loads(open(path, encoding="utf-8").read())
+        if not isinstance(games, list):
+            games = []
+    except Exception:
+        games = []
+row = {
+    "cmsId": cms,
+    "parentGameId": parent,
+    "title": title,
+    "shortName": short,
+    "appStore": store,
+    "desktop": desktop,
+    "icon": icon,
+}
+games = [g for g in games if str(g.get("cmsId") or "") != cms]
+games.append(row)
+games.sort(key=lambda g: (str(g.get("title") or "").lower(), str(g.get("appStore") or "")))
+open(path, "w", encoding="utf-8").write(json.dumps(games, ensure_ascii=False, indent=2) + "\n")
+PY
+
+if [[ -x "${SCRIPT_DIR}/sync-menu-games.sh" ]]; then
+  "${SCRIPT_DIR}/sync-menu-games.sh" >/dev/null || true
 fi
 
 echo "$DESKTOP_PATH"

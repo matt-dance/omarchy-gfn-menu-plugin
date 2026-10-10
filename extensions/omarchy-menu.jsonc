@@ -22,5 +22,7 @@
     "label": "Search GeForce NOW",
     "description": "Open the GFN search overlay (plugin: matt-dance.gfn)",
     "action": "omarchy-shell shell summon matt-dance.gfn '{}'"
-  }
+  },
+  // gfn-games:start
+  // gfn-games:end
 }
