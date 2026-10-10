@@ -37,6 +37,6 @@
     "label": "Remove a game",
     "description": "Remove a GeForce NOW / GFN menu and Apps entry",
     "aliases": ["gfn remove", "remove gfn", "delete game", "uninstall gfn game"],
-    "action": "omarchy-launch-floating-terminal-with-presentation \"$HOME/.config/omarchy/plugins/matt-dance.gfn/scripts/gfn-remove.sh\""
+    "action": "omarchy-launch-floating-terminal-with-presentation $HOME/.config/omarchy/plugins/matt-dance.gfn/scripts/gfn-remove.sh"
   }
 }

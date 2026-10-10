@@ -83,6 +83,10 @@ mkdir -p "$APPS_DIR" "$ICON_DIR"
 DESKTOP_PATH="$APPS_DIR/gfn-${SAFE_CMS}.desktop"
 ICON_PATH="$ICON_DIR/gfn-${SAFE_CMS}.png"
 ICON_VALUE="applications-games"
+# Keep an existing resized box-art icon across --force rewrites without --box-art-url.
+if [[ -f "$ICON_PATH" ]]; then
+  ICON_VALUE="$ICON_PATH"
+fi
 
 if [[ -e "$DESKTOP_PATH" && "$FORCE" -ne 1 ]]; then
   echo "Exists (use --force to overwrite): $DESKTOP_PATH" >&2

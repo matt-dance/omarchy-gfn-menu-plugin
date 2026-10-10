@@ -64,7 +64,10 @@ for g in games:
     # clipping "… · STEAM" / "Battle.net" off long titles.
     label = f"{store} · {title}"
     desc = "GeForce NOW · GFN"
-    aliases = ["gfn", "geforce now", f"{title} gfn", store.lower(), raw_store.lower()]
+    aliases = []
+    for a in ["gfn", "geforce now", f"{title} gfn", store.lower(), raw_store.lower()]:
+        if a and a not in aliases:
+            aliases.append(a)
     obj = {
         "icon": "󰢹",
         "label": label,
