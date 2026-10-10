@@ -35,15 +35,18 @@ From Omarchy’s Quattro plugin model:
 
 `omarchy plugin add` only clones, validates, and toggles enablement. It does not inject menu rows or write `.desktop` files. Those are the companion steps below. Launch details and the machine constraints are in [`HANDOFF.md`](HANDOFF.md). The original design is in [`PLAN.md`](PLAN.md).
 
-## Prerequisites
+## First steps
 
-On the Omarchy machine:
+Do these before adding the plugin. This plugin does not install GeForce NOW or sign you in.
 
-1. Omarchy with Quattro shell plugins (`omarchy-shell`).
-2. **GeForce NOW installed and signed in** (Omarchy: Install › Gaming › NVIDIA GeForce NOW). This plugin does not install or log you into GFN.
-3. Optional but useful: `update-desktop-database` for refreshing Apps after writing launchers.
+1. **Install GeForce NOW.** On Omarchy: Install › Gaming › NVIDIA GeForce NOW.
+2. **Log in.** Open GeForce NOW and sign in to the account that owns the games. A launch cannot start a game until that account is signed in.
+
+You also need Omarchy with Quattro shell plugins (`omarchy-shell`). `update-desktop-database` is optional; it refreshes Apps after a launcher is written.
 
 ## Install
+
+After GeForce NOW is installed and you are logged in:
 
 ```bash
 omarchy plugin add https://github.com/matt-dance/omarchy-gfn-menu-plugin.git --enable
