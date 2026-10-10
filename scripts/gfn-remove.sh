@@ -91,11 +91,14 @@ for PICK in "${SELECTED[@]}"; do
   LABEL="${PICK% \[*}"
 
   if ! python3 - "$CATALOG" "$CMS_ID" <<'PY'
-import json, os, sys
+import json, os, re, sys
 from pathlib import Path
 
 catalog = Path(sys.argv[1])
 cms = sys.argv[2]
+if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", cms):
+    print(f"invalid cmsId={cms!r}", file=sys.stderr)
+    sys.exit(1)
 games = json.loads(catalog.read_text(encoding="utf-8"))
 keep = []
 removed = None
@@ -107,12 +110,15 @@ for g in games:
 if removed is None:
     print(f"No catalog row for cmsId={cms}", file=sys.stderr)
     sys.exit(1)
-catalog.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+tmp = catalog.with_suffix(catalog.suffix + ".tmp")
+tmp.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+tmp.replace(catalog)
 
 desktop = Path(str(removed.get("desktop") or ""))
 icon = Path(str(removed.get("icon") or ""))
-apps = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "applications"
-icons = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons" / "gfn"
+xdg = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+apps = xdg / "applications"
+icons = xdg / "icons" / "gfn"
 cand_desktop = apps / f"gfn-{cms}.desktop"
 cand_icon = icons / f"gfn-{cms}.png"
 
@@ -123,18 +129,35 @@ def desktop_kv(text: str, key: str) -> str:
             return line[len(prefix):].strip()
     return ""
 
+def is_plugin_desktop(path: Path) -> bool:
+    """Only unlink plugin-owned gfn-*.desktop files under the apps dir."""
+    try:
+        resolved = path.resolve()
+        apps_resolved = apps.resolve()
+    except OSError:
+        return False
+    if resolved.parent != apps_resolved or not resolved.is_file():
+        return False
+    if not re.fullmatch(r"gfn-[A-Za-z0-9._-]{1,64}\.desktop", resolved.name):
+        return False
+    try:
+        text = resolved.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return desktop_kv(text, "X-Omarchy-Plugin") == "matt-dance.gfn-omarchy"
+
 # Remove catalog path + canonical cmsId desktop…
-to_remove = {p for p in (desktop, cand_desktop) if p.is_file()}
+to_remove = {p for p in (desktop, cand_desktop) if is_plugin_desktop(p)}
 # …and any other plugin-owned gfn-*.desktop that still carries this cmsId
 # (e.g. legacy gfn-<parentGameId>.desktop). Do NOT touch proven
 # gfn-diablo-iv.desktop (no X-Omarchy-Plugin / X-GFN-CmsId).
 if apps.is_dir():
     for path in apps.glob("gfn-*.desktop"):
+        if not is_plugin_desktop(path):
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
-            continue
-        if desktop_kv(text, "X-Omarchy-Plugin") != "matt-dance.gfn-omarchy":
             continue
         if desktop_kv(text, "X-GFN-CmsId") == cms or path.name == f"gfn-{cms}.desktop":
             to_remove.add(path)
@@ -143,10 +166,15 @@ for path in sorted(to_remove):
     path.unlink()
     print(f"removed {path}")
 
+icons_resolved = icons.resolve() if icons.is_dir() else icons
 for path in (icon, cand_icon):
-    if path.is_file() and str(path).startswith(str(icons)):
-        path.unlink()
-        print(f"removed {path}")
+    try:
+        resolved = path.resolve()
+    except OSError:
+        continue
+    if resolved.is_file() and resolved.parent == icons_resolved and resolved.name == f"gfn-{cms}.png":
+        resolved.unlink()
+        print(f"removed {resolved}")
 print(f"removed catalog row cmsId={cms}")
 PY
   then

@@ -49,14 +49,22 @@ def slug(title, store, cms):
 def esc(s):
     return json.dumps(s, ensure_ascii=False)[1:-1]
 
+def strip_controls(text):
+    return re.sub(r"[\x00-\x1f\x7f]", "", str(text or ""))
+
 lines = []
 for g in games:
-    title = str(g.get("title") or "GeForce NOW Game")
-    raw_store = str(g.get("appStore") or "").strip()
+    title = strip_controls(g.get("title") or "GeForce NOW Game").strip() or "GeForce NOW Game"
+    raw_store = strip_controls(g.get("appStore") or "").strip()
+    if raw_store and not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", raw_store):
+        continue
     store = STORE.get(raw_store.upper(), raw_store or "GFN")
-    cms = str(g.get("cmsId") or "")
+    cms = strip_controls(g.get("cmsId") or "").strip()
     desktop = str(g.get("desktop") or "")
-    if not cms or not desktop:
+    desktop_name = os.path.basename(desktop)
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", cms):
+        continue
+    if not re.fullmatch(r"gfn-[A-Za-z0-9._-]{1,64}\.desktop", desktop_name):
         continue
     key = "gaming.geforce-now." + slug(title, raw_store, cms)
     # Matt UX: primary "GFN - <Game>"; store as small/subtitle (description).
@@ -71,7 +79,7 @@ for g in games:
         "label": label,
         "description": desc,
         "aliases": aliases,
-        "action": f"gtk-launch {os.path.basename(desktop)}",
+        "action": f"gtk-launch {desktop_name}",
     }
     body = json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
     lines.append(f'  "{esc(key)}": {body},')

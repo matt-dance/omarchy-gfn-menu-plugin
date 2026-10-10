@@ -96,6 +96,15 @@ Item {
       root.notifyFailure("Could not add game", root.lastError)
       return false
     }
+    if (!GfnModel.isSafeId(String(g.cmsId || ""))
+        || !GfnModel.isSafeId(String(g.id || g.parentGameId || ""))
+        || !GfnModel.isSafeOptionalId(g.shortName)
+        || !GfnModel.isSafeOptionalId(g.appStore)) {
+      root.lastError = "invalid cmsId, parentGameId, shortName, or appStore"
+      root.lastAction = "addToApps:failed"
+      root.notifyFailure("Could not add game", root.lastError)
+      return false
+    }
     if (writerProcess.running) {
       root.lastError = "writer already running"
       root.lastAction = "addToApps:failed"
@@ -114,6 +123,12 @@ Item {
     var g = game || {}
     if (!g.cmsId || !(g.id || g.parentGameId)) {
       root.lastError = "missing cmsId or parentGameId — resolve from GraphQL catalog"
+      return false
+    }
+    if (!GfnModel.isSafeId(String(g.cmsId || ""))
+        || !GfnModel.isSafeId(String(g.id || g.parentGameId || ""))
+        || !GfnModel.isSafeOptionalId(g.shortName)) {
+      root.lastError = "invalid cmsId, parentGameId, or shortName"
       return false
     }
     if (launchProcess.running) {

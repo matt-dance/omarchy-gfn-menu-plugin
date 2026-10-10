@@ -50,6 +50,11 @@ DEFAULT_LIMIT = 40
 USER_AGENT = "matt-dance.gfn-omarchy-catalog-search/0.1 (+Omarchy plugin)"
 # Bump when row shape / cmsId selection changes (invalidates old caches).
 CACHE_VERSION = "v3"
+# Reject a single GraphQL page larger than this (read N+1, then fail).
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_CTRL_RE = re.compile(r"[\x00-\x1f\x7f]")
+_UNSAFE_CURSOR_RE = re.compile(r'["\\\x00-\x1f\x7f]')
 
 # Proven Steam variant (HANDOFF / gfn-play-diablo-iv). Offline fallback only.
 DIABLO_IV_FALLBACK = [
@@ -193,10 +198,31 @@ def graphql_url(after: str | None) -> str:
     return f"{ENDPOINT}?{params}"
 
 
+def is_safe_id(value: str) -> bool:
+    return bool(value) and bool(_ID_RE.fullmatch(value))
+
+
+def is_safe_optional_id(value: str) -> bool:
+    return value == "" or is_safe_id(value)
+
+
+def strip_controls(text: str) -> str:
+    return _CTRL_RE.sub("", str(text or ""))
+
+
+def is_https_url(url: str) -> bool:
+    if not url or _CTRL_RE.search(url):
+        return False
+    parsed = urllib.parse.urlparse(url)
+    return parsed.scheme == "https" and bool(parsed.netloc)
+
+
 def http_get_json(url: str, timeout: float = 60.0) -> dict[str, Any]:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read()
+        raw = resp.read(MAX_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise ValueError(f"catalog response exceeds {MAX_RESPONSE_BYTES} bytes")
     return json.loads(raw.decode("utf-8"))
 
 
@@ -270,13 +296,24 @@ def normalize_item(item: dict[str, Any]) -> list[dict[str, str]]:
     parent_cms = item.get("cmsId")
     parent_cms_str = str(parent_cms).strip() if parent_cms is not None else ""
     box_art = _box_art_url(item)
+    if box_art and not is_https_url(box_art):
+        box_art = ""
+    parent_id = strip_controls(str(item_id)).strip()
+    title_text = strip_controls(str(title)).strip()
+    if not is_safe_id(parent_id) or not title_text:
+        return []
     rows: list[dict[str, str]] = []
     for cms_id, short_name, app_store in launchable_variants(item.get("variants"), parent_cms_str):
+        cms_id = strip_controls(cms_id).strip()
+        short_name = strip_controls(short_name).strip()
+        app_store = strip_controls(app_store).strip()
+        if not is_safe_id(cms_id) or not is_safe_optional_id(short_name) or not is_safe_optional_id(app_store):
+            continue
         rows.append(
             {
-                "id": str(item_id),
+                "id": parent_id,
                 "cmsId": cms_id,
-                "title": str(title),
+                "title": title_text,
                 "shortName": short_name,
                 "appStore": app_store,
                 "boxArt": box_art,
@@ -299,23 +336,34 @@ def fetch_catalog() -> list[dict[str, str]]:
         if not page_info.get("hasNextPage"):
             break
         end_cursor = page_info.get("endCursor")
-        if not end_cursor or end_cursor in seen_cursors:
+        if not isinstance(end_cursor, str) or not end_cursor or end_cursor in seen_cursors:
+            break
+        if _UNSAFE_CURSOR_RE.search(end_cursor):
             break
         seen_cursors.add(end_cursor)
-        after = str(end_cursor)
+        after = end_cursor
     return items
 
 
 def row_from_cache_dict(raw: dict[str, Any]) -> dict[str, str] | None:
+    box_art = strip_controls(str(raw.get("boxArt") or "")).strip()
+    if box_art and not is_https_url(box_art):
+        box_art = ""
     row = {
-        "id": str(raw.get("id") or ""),
-        "cmsId": str(raw.get("cmsId") or ""),
-        "title": str(raw.get("title") or ""),
-        "shortName": str(raw.get("shortName") or ""),
-        "appStore": str(raw.get("appStore") or ""),
-        "boxArt": str(raw.get("boxArt") or ""),
+        "id": strip_controls(str(raw.get("id") or "")).strip(),
+        "cmsId": strip_controls(str(raw.get("cmsId") or "")).strip(),
+        "title": strip_controls(str(raw.get("title") or "")).strip(),
+        "shortName": strip_controls(str(raw.get("shortName") or "")).strip(),
+        "appStore": strip_controls(str(raw.get("appStore") or "")).strip(),
+        "boxArt": box_art,
     }
-    if row["id"] and row["cmsId"] and row["title"]:
+    if (
+        is_safe_id(row["id"])
+        and is_safe_id(row["cmsId"])
+        and row["title"]
+        and is_safe_optional_id(row["shortName"])
+        and is_safe_optional_id(row["appStore"])
+    ):
         return row
     return None
 
