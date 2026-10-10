@@ -142,13 +142,15 @@ gfn_im_limit_args() {
     -limit time "$GFN_BOXART_IM_TIME"
 }
 
-# Header-only width/height (no pixel cache). IM7: magick identify; IM6: identify.
+# Header-only width/height (no pixel cache).
+# IM7 requires the subcommand first: `magick identify -limit … -ping file`.
+# `magick -limit … identify …` treats "identify" as an input filename.
 gfn_box_art_ping() {
   local src="$1" out=""
   local -a limits=()
   mapfile -t limits < <(gfn_im_limit_args ping)
   if command -v magick >/dev/null 2>&1; then
-    out="$(gfn_run_im magick "${limits[@]}" identify -ping -format '%w %h' "$src")" || return 1
+    out="$(gfn_run_im magick identify "${limits[@]}" -ping -format '%w %h' "$src")" || return 1
   elif command -v identify >/dev/null 2>&1; then
     out="$(gfn_run_im identify "${limits[@]}" -ping -format '%w %h' "$src")" || return 1
   else
@@ -172,7 +174,8 @@ gfn_box_art_dims_ok() {
   return 0
 }
 
-# Full decode + resize, with decoder dimension/memory/disk/time limits.
+# Full decode + resize. Limits must precede the input so they bind the decoder.
+# IM7: `magick -limit … src -resize …` (no subcommand). IM6: `convert -limit …`.
 gfn_box_art_resize() {
   local src="$1" dest="$2"
   local -a limits=()
