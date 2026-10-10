@@ -72,18 +72,44 @@ function isAlreadyAdded(row) {
   return false
 }
 
+/**
+ * Catalog IDs that are safe to write into .desktop keys / --url-route.
+ * Matches scripts/write-desktop-entry.sh and gfn-play.sh.
+ */
+function isSafeId(value) {
+  return /^[A-Za-z0-9._-]{1,64}$/.test(String(value || ""))
+}
+
+function isSafeOptionalId(value) {
+  var s = String(value || "")
+  return s.length === 0 || isSafeId(s)
+}
+
+function stripControls(text) {
+  return String(text || "").replace(/[\x00-\x1F\x7F]/g, "")
+}
+
+function isHttpsUrl(url) {
+  var u = String(url || "")
+  if (!u.length || /[\x00-\x1F\x7F]/.test(u))
+    return false
+  return /^https:\/\/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+$/.test(u)
+}
+
 function enrichRow(row) {
   var r = row || {}
-  var id = String(r.id || r.parentGameId || "")
-  var cmsId = String(r.cmsId || "")
-  var shortName = String(r.shortName || "")
-  var appStore = String(r.appStore || "")
+  var id = stripControls(String(r.id || r.parentGameId || ""))
+  var cmsId = stripControls(String(r.cmsId || ""))
+  var shortName = stripControls(String(r.shortName || ""))
+  var appStore = stripControls(String(r.appStore || ""))
   var boxArt = String(r.boxArt || "")
-  var title = String(r.title || "")
+  if (!isHttpsUrl(boxArt))
+    boxArt = ""
+  var title = stripControls(String(r.title || ""))
   var alreadyAdded = isAlreadyAdded(r)
   var storePretty = humanizeStore(appStore)
   var displayTitle = primaryLabel({ title: title })
-  var subtitle = String(r.subtitle || "")
+  var subtitle = stripControls(String(r.subtitle || ""))
   // Matt UX: already-added stays visible; otherwise store is the small print.
   if (alreadyAdded) {
     subtitle = "game already added"
@@ -171,7 +197,7 @@ function parseSearchOutput(text, query) {
  * shortName for --url-route. Empty string is valid (proven Diablo IV).
  */
 function effectiveShortName(shortName) {
-  return String(shortName || "").trim()
+  return stripControls(String(shortName || "")).trim()
 }
 
 /**
@@ -185,7 +211,7 @@ function writeDesktopEntryCommand(scriptPath, game) {
     String(scriptPath),
     "--cms-id", String(g.cmsId || ""),
     "--parent-game-id", String(g.id || g.parentGameId || ""),
-    "--title", String(g.title || "GeForce NOW Game"),
+    "--title", stripControls(String(g.title || "GeForce NOW Game")),
     "--force"
   ]
   // Always pass --short-name so an empty catalog value stays empty
@@ -194,7 +220,7 @@ function writeDesktopEntryCommand(scriptPath, game) {
   // Always pass store + box art when present so overlay adds keep icons/labels.
   argv.push("--app-store", String(g.appStore || ""))
   var box = String(g.boxArt || "")
-  if (box.length)
+  if (box.length && isHttpsUrl(box))
     argv.push("--box-art-url", box)
   return argv
 }
@@ -212,7 +238,7 @@ function launchCommand(playScriptPath, game) {
     "--cms-id", String(g.cmsId || ""),
     "--parent-game-id", String(g.id || g.parentGameId || ""),
     "--short-name", effectiveShortName(g.shortName),
-    "--title", String(g.title || "GeForce NOW game")
+    "--title", stripControls(String(g.title || "GeForce NOW game"))
   ]
   return argv
 }

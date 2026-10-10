@@ -1,0 +1,28 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils shellcheck
+
+      - name: Shellcheck
+        run: |
+          # SC1111: pre-existing curly quotes in user-facing gfn-play / gfn-remove copy.
+          shellcheck scripts/write-desktop-entry.sh scripts/sync-menu-games.sh
+          shellcheck -e SC1111 scripts/gfn-play.sh scripts/gfn-remove.sh
+
+      - name: Desktop-entry security tests
+        run: bash tests/test-write-desktop-entry.sh
+
+      - name: Catalog search tests
+        run: python3 tests/test-gfn-catalog-search.py

@@ -25,6 +25,87 @@ APP_STORE=""
 BOX_ART_URL=""
 FORCE=0
 
+# Catalog / desktop IDs: reject anything that could split a .desktop line.
+readonly GFN_ID_RE='^[A-Za-z0-9._-]{1,64}$'
+# Box art: https only, no controls / whitespace / quotes (curl + Icon=).
+readonly GFN_HTTPS_RE='^https://[A-Za-z0-9._~:/?#@!$&*+,;=%-]+$'
+# 2 MiB: box-art download cap (curl --max-filesize).
+readonly GFN_BOXART_MAX_BYTES=2097152
+
+is_safe_id() {
+  [[ -n "$1" && "$1" =~ $GFN_ID_RE ]]
+}
+
+# Strip C0 controls and DEL. Bash argv cannot carry NUL; tr still drops it.
+strip_controls() {
+  printf '%s' "$1" | LC_ALL=C tr -d '\000-\037\177'
+}
+
+# Desktop Entry string escapes: \\ \n \t \r and leading/trailing \s.
+# Control characters should already have been stripped; these remain as defense.
+escape_desktop_string() {
+  local s="$1" lead=0 tail=0 mid
+  s="${s//\\/\\\\}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\t'/\\t}"
+  s="${s//$'\r'/\\r}"
+  mid="$s"
+  while [[ "$mid" == ' '* ]]; do
+    lead=$((lead + 1))
+    mid="${mid# }"
+  done
+  while [[ "$mid" == *' ' ]]; do
+    tail=$((tail + 1))
+    mid="${mid% }"
+  done
+  local i out=""
+  for ((i = 0; i < lead; i++)); do
+    out+='\s'
+  done
+  out+="$mid"
+  for ((i = 0; i < tail; i++)); do
+    out+='\s'
+  done
+  printf '%s' "$out"
+}
+
+# Exec argument: always double-quoted. Escape \, ", `, $; literal % → %%.
+# Caller must strip controls first so the value cannot split Exec=.
+quote_exec_arg() {
+  local s="$1"
+  s="${s//%/%%}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//\`/\\\`}"
+  s="${s//\$/\\\$}"
+  printf '"%s"' "$s"
+}
+
+# Fail closed if a sanitized value still contains a line break (injection).
+assert_single_line() {
+  local name="$1" value="$2"
+  if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+    echo "error: ${name} contains a CR/LF after sanitizing; refusing to write" >&2
+    exit 1
+  fi
+}
+
+require_id() {
+  local name="$1" value="$2"
+  if ! is_safe_id "$value"; then
+    echo "error: ${name} must match ${GFN_ID_RE} (got $(printf '%q' "$value"))" >&2
+    exit 2
+  fi
+}
+
+require_optional_id() {
+  local name="$1" value="$2"
+  if [[ -n "$value" ]] && ! is_safe_id "$value"; then
+    echo "error: ${name} must be empty or match ${GFN_ID_RE} (got $(printf '%q' "$value"))" >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cms-id)
@@ -71,11 +152,31 @@ if [[ -z "$CMS_ID" || -z "$PARENT_GAME_ID" || -z "$GAME_TITLE" ]]; then
   exit 2
 fi
 
-# One desktop file per variant cmsId so Steam vs Battle.net can coexist.
-SAFE_CMS="$(printf '%s' "$CMS_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
-if [[ -z "$SAFE_CMS" ]]; then
-  SAFE_CMS="unknown"
+# IDs / store tokens are allowlisted before any file is touched.
+require_id "--cms-id" "$CMS_ID"
+require_id "--parent-game-id" "$PARENT_GAME_ID"
+require_optional_id "--short-name" "$SHORT_NAME"
+require_optional_id "--app-store" "$APP_STORE"
+
+GAME_TITLE="$(strip_controls "$GAME_TITLE")"
+# Trim surrounding whitespace after control strip.
+GAME_TITLE="${GAME_TITLE#"${GAME_TITLE%%[![:space:]]*}"}"
+GAME_TITLE="${GAME_TITLE%"${GAME_TITLE##*[![:space:]]}"}"
+if [[ -z "$GAME_TITLE" ]]; then
+  echo "error: --title is empty after removing control characters" >&2
+  exit 2
 fi
+
+if [[ -n "$BOX_ART_URL" ]]; then
+  BOX_ART_URL="$(strip_controls "$BOX_ART_URL")"
+  if [[ ! "$BOX_ART_URL" =~ $GFN_HTTPS_RE ]]; then
+    echo "warning: ignoring unsafe --box-art-url (https only, no controls)" >&2
+    BOX_ART_URL=""
+  fi
+fi
+
+# One desktop file per variant cmsId so Steam vs Battle.net can coexist.
+SAFE_CMS="$(printf '%s' "$CMS_ID" | tr '[:upper:]' '[:lower:]')"
 
 APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/gfn"
@@ -94,17 +195,6 @@ if [[ -e "$DESKTOP_PATH" && "$FORCE" -ne 1 ]]; then
   exit 0
 fi
 
-# Escape desktop-entry special characters in Name= / Comment=.
-escape_desktop_string() {
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/\n/\\n/g' -e 's/\r/\\r/g'
-}
-
-# Desktop Entry Spec: quote args containing reserved chars with double quotes;
-# inside quotes escape \, ", `, $.
-escape_exec_quoted() {
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/`/\\`/g' -e 's/\$/\\$/g'
-}
-
 SAFE_TITLE="$(escape_desktop_string "$GAME_TITLE")"
 STORE_LABEL="$(printf '%s' "$APP_STORE" | tr '[:upper:]' '[:lower:]')"
 if [[ -n "$STORE_LABEL" ]]; then
@@ -112,13 +202,33 @@ if [[ -n "$STORE_LABEL" ]]; then
   KEYWORDS="$(escape_desktop_string "GeForce NOW;GFN;${APP_STORE};${STORE_LABEL};")"
 else
   COMMENT="$(escape_desktop_string "Stream via GeForce NOW (Omarchy plugin matt-dance.gfn-omarchy)")"
-  KEYWORDS="GeForce NOW;GFN;"
+  KEYWORDS="$(escape_desktop_string "GeForce NOW;GFN;")"
 fi
+
+tmp_img=""
+tmp_dir=""
+cleanup() {
+  if [[ -n "${tmp_img:-}" ]]; then
+    rm -f "$tmp_img"
+  fi
+  if [[ -n "${tmp_dir:-}" && -d "$tmp_dir" ]]; then
+    rm -rf "$tmp_dir"
+  fi
+}
+trap cleanup EXIT
 
 # Download / resize GAME_BOX_ART when provided (ImageMagick).
 if [[ -n "$BOX_ART_URL" ]]; then
   tmp_img="$(mktemp "${TMPDIR:-/tmp}/gfn-boxart.XXXXXX")"
-  if curl -fsSL --max-time 45 -A "matt-dance.gfn-omarchy-icon/0.1" -o "$tmp_img" "$BOX_ART_URL"; then
+  if curl -fsSL \
+    --proto '=https' \
+    --proto-redir '=https' \
+    --max-filesize "$GFN_BOXART_MAX_BYTES" \
+    --max-time 45 \
+    -A "matt-dance.gfn-omarchy-icon/0.1" \
+    -o "$tmp_img" \
+    -- \
+    "$BOX_ART_URL"; then
     if magick "$tmp_img" -resize '362x512>' -strip "PNG32:${ICON_PATH}" 2>/dev/null \
       || convert "$tmp_img" -resize '362x512>' -strip "PNG32:${ICON_PATH}" 2>/dev/null; then
       ICON_VALUE="$ICON_PATH"
@@ -129,13 +239,15 @@ if [[ -n "$BOX_ART_URL" ]]; then
     echo "warning: could not download box art for $CMS_ID" >&2
   fi
   rm -f "$tmp_img"
+  tmp_img=""
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAY_SCRIPT="${SCRIPT_DIR}/gfn-play.sh"
-# Desktop Exec: double-quote args (desktop-file-validate rejects bash '' quoting).
-dq() { escape_exec_quoted "$1"; }
-EXEC_LINE="bash \"$(dq "$PLAY_SCRIPT")\" --cms-id \"$(dq "$CMS_ID")\" --parent-game-id \"$(dq "$PARENT_GAME_ID")\" --short-name \"$(dq "$SHORT_NAME")\" --title \"$(dq "$GAME_TITLE")\""
+# Desktop Exec: double-quote every argument (desktop-file-validate rejects bash '' quoting).
+# Keyfile-unescape happens before Exec parsing, so quote then escape the whole line.
+EXEC_LINE="bash $(quote_exec_arg "$PLAY_SCRIPT") --cms-id $(quote_exec_arg "$CMS_ID") --parent-game-id $(quote_exec_arg "$PARENT_GAME_ID") --short-name $(quote_exec_arg "$SHORT_NAME") --title $(quote_exec_arg "$GAME_TITLE")"
+EXEC_LINE="$(escape_desktop_string "$EXEC_LINE")"
 
 # Matt UX: primary "GFN - <Game>"; store is the small print (Comment).
 STORE_PRETTY="$(printf '%s' "$APP_STORE" | tr '[:lower:]' '[:upper:]')"
@@ -155,7 +267,29 @@ else
   COMMENT="$(escape_desktop_string "GeForce NOW")"
 fi
 
-cat >"$DESKTOP_PATH" <<EOF
+ICON_ESCAPED="$(escape_desktop_string "$ICON_VALUE")"
+X_CMS="$(escape_desktop_string "$CMS_ID")"
+X_PARENT="$(escape_desktop_string "$PARENT_GAME_ID")"
+X_SHORT="$(escape_desktop_string "$SHORT_NAME")"
+X_STORE="$(escape_desktop_string "$APP_STORE")"
+
+assert_single_line "Name" "$DISPLAY_NAME"
+assert_single_line "GenericName" "$SAFE_TITLE"
+assert_single_line "Comment" "$COMMENT"
+assert_single_line "Exec" "$EXEC_LINE"
+assert_single_line "Icon" "$ICON_ESCAPED"
+assert_single_line "Keywords" "$KEYWORDS"
+assert_single_line "X-GFN-CmsId" "$X_CMS"
+assert_single_line "X-GFN-ParentGameId" "$X_PARENT"
+assert_single_line "X-GFN-ShortName" "$X_SHORT"
+assert_single_line "X-GFN-AppStore" "$X_STORE"
+
+# Atomic install: write + validate a temp file, then mv into place.
+# Hidden dir under applications/ so a crash cannot leave a launchable entry.
+tmp_dir="$(mktemp -d -p "$APPS_DIR" ".gfn-write.XXXXXX")"
+tmp_desktop="${tmp_dir}/gfn-${SAFE_CMS}.desktop"
+
+cat >"$tmp_desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Version=1.0
@@ -163,28 +297,33 @@ Name=${DISPLAY_NAME}
 GenericName=${SAFE_TITLE}
 Comment=${COMMENT}
 Exec=${EXEC_LINE}
-Icon=${ICON_VALUE}
+Icon=${ICON_ESCAPED}
 StartupWMClass=GeForceNOW
 Categories=Game;
 Keywords=${KEYWORDS}
 Terminal=false
 StartupNotify=true
-X-GFN-CmsId=${CMS_ID}
-X-GFN-ParentGameId=${PARENT_GAME_ID}
-X-GFN-ShortName=${SHORT_NAME}
-X-GFN-AppStore=${APP_STORE}
+X-GFN-CmsId=${X_CMS}
+X-GFN-ParentGameId=${X_PARENT}
+X-GFN-ShortName=${X_SHORT}
+X-GFN-AppStore=${X_STORE}
 X-Omarchy-Plugin=matt-dance.gfn-omarchy
 EOF
+
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  if ! desktop-file-validate "$tmp_desktop"; then
+    echo "error: desktop-file-validate failed; not installing ${DESKTOP_PATH}" >&2
+    exit 1
+  fi
+fi
+
+mv -f "$tmp_desktop" "$DESKTOP_PATH"
+rmdir "$tmp_dir"
+tmp_dir=""
 
 # Best-effort refresh of desktop database when available.
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
-fi
-
-if command -v desktop-file-validate >/dev/null 2>&1; then
-  if ! desktop-file-validate "$DESKTOP_PATH"; then
-    echo "warning: desktop-file-validate reported issues for $DESKTOP_PATH" >&2
-  fi
 fi
 
 # Record + sync Omarchy menu game rows (marked gfn-games block).
@@ -194,6 +333,7 @@ mkdir -p "$STATE_DIR"
 CATALOG="$STATE_DIR/games.json"
 python3 - "$CATALOG" "$CMS_ID" "$PARENT_GAME_ID" "$GAME_TITLE" "$SHORT_NAME" "$APP_STORE" "$DESKTOP_PATH" "$ICON_VALUE" <<'PY'
 import json, os, sys
+
 path, cms, parent, title, short, store, desktop, icon = sys.argv[1:9]
 games = []
 if os.path.isfile(path):
@@ -215,7 +355,10 @@ row = {
 games = [g for g in games if str(g.get("cmsId") or "") != cms]
 games.append(row)
 games.sort(key=lambda g: (str(g.get("title") or "").lower(), str(g.get("appStore") or "")))
-open(path, "w", encoding="utf-8").write(json.dumps(games, ensure_ascii=False, indent=2) + "\n")
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps(games, ensure_ascii=False, indent=2) + "\n")
+os.replace(tmp, path)
 PY
 
 if [[ -x "${SCRIPT_DIR}/sync-menu-games.sh" ]]; then

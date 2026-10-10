@@ -44,6 +44,26 @@ if [[ -z "$CMS_ID" || -z "$PARENT_GAME_ID" ]]; then
   exit 2
 fi
 
+# Same allowlist as write-desktop-entry.sh: catalog values reach --url-route.
+readonly GFN_ID_RE='^[A-Za-z0-9._-]{1,64}$'
+is_safe_id() {
+  [[ -n "$1" && "$1" =~ $GFN_ID_RE ]]
+}
+if ! is_safe_id "$CMS_ID" || ! is_safe_id "$PARENT_GAME_ID"; then
+  echo "error: --cms-id and --parent-game-id must match ${GFN_ID_RE}" >&2
+  exit 2
+fi
+if [[ -n "$SHORT_NAME" ]] && ! is_safe_id "$SHORT_NAME"; then
+  echo "error: --short-name must be empty or match ${GFN_ID_RE}" >&2
+  exit 2
+fi
+GAME_TITLE="$(printf '%s' "$GAME_TITLE" | LC_ALL=C tr -d '\000-\037\177')"
+GAME_TITLE="${GAME_TITLE#"${GAME_TITLE%%[![:space:]]*}"}"
+GAME_TITLE="${GAME_TITLE%"${GAME_TITLE##*[![:space:]]}"}"
+if [[ -z "$GAME_TITLE" ]]; then
+  GAME_TITLE="GeForce NOW game"
+fi
+
 notify() {
   local urgency="$1" summary="$2" body="$3"
   echo "$summary: $body" >&2

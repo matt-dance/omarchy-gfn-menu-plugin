@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "matt-dance.gfn-omarchy",
   "name": "GeForce NOW Menu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Matt Dance",
   "license": "MIT",
   "description": "Search GeForce NOW and add titles as native Omarchy Apps launchers.",
