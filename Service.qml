@@ -21,13 +21,28 @@ Item {
 
   readonly property string writerScript: root.pluginDir + "/scripts/write-desktop-entry.sh"
   readonly property string searchScript: root.pluginDir + "/scripts/gfn-catalog-search.py"
+  readonly property string playScript: root.pluginDir + "/scripts/gfn-play.sh"
 
   property string lastAction: ""
   property string lastError: ""
   property var lastResults: []
   property string lastSearchQuery: ""
+  property string lastAddLabel: ""
   property int searchGeneration: 0
   property int searchLimit: 40
+
+  function notifyFailure(summary, body) {
+    if (notifyProcess.running)
+      notifyProcess.running = false
+    notifyProcess.command = [
+      "notify-send",
+      "-a", "GeForce NOW Menu",
+      "-u", "normal",
+      String(summary || "Could not add game"),
+      String(body || "")
+    ]
+    notifyProcess.running = true
+  }
 
   function search(query) {
     // Async: scripts/gfn-catalog-search.py (GraphQL cache + local title filter).
@@ -53,15 +68,21 @@ Item {
 
   function addToApps(game) {
     // Writes a .desktop entry via the companion script (Flatpak --url-route Exec).
+    // Success notify-send lives in write-desktop-entry.sh; failures notify here.
     root.lastAction = "addToApps"
     root.lastError = ""
     var g = game || {}
+    root.lastAddLabel = GfnModel.addLabel(g)
     if (!g.cmsId || !(g.id || g.parentGameId)) {
       root.lastError = "missing cmsId or parentGameId — resolve from GraphQL catalog"
+      root.lastAction = "addToApps:failed"
+      root.notifyFailure("Could not add game", root.lastError)
       return false
     }
     if (writerProcess.running) {
       root.lastError = "writer already running"
+      root.lastAction = "addToApps:failed"
+      root.notifyFailure("Could not add game", root.lastError)
       return false
     }
     writerProcess.command = GfnModel.writeDesktopEntryCommand(root.writerScript, g)
@@ -82,7 +103,7 @@ Item {
       root.lastError = "launch already running"
       return false
     }
-    launchProcess.command = GfnModel.launchCommand(g)
+    launchProcess.command = GfnModel.launchCommand(root.playScript, g)
     launchProcess.running = true
     return true
   }
@@ -140,8 +161,7 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        // Script prints the written path on success.
-        root.lastAction = "addToApps:done"
+        // Script prints the written path on success (notify-send is in the script).
       }
     }
     stderr: StdioCollector {
@@ -151,6 +171,21 @@ Item {
           root.lastError = String(text).trim()
       }
     }
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        root.lastError = ""
+        root.lastAction = "addToApps:done"
+        return
+      }
+      if (!root.lastError || !String(root.lastError).length)
+        root.lastError = "Failed to write desktop entry (exit " + exitCode + ")"
+      root.lastAction = "addToApps:failed"
+      root.notifyFailure("Could not add game", root.lastError)
+    }
+  }
+
+  Process {
+    id: notifyProcess
   }
 
   Process {
