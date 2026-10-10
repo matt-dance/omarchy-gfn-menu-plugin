@@ -140,11 +140,14 @@ def load_already_added(
                 text = path.read_text(encoding="utf-8")
             except OSError:
                 continue
+            # Only plugin-owned desktops (not legacy proven ~/.local/bin launchers).
+            if _desktop_key_value(text, "X-Omarchy-Plugin") != "matt-dance.gfn":
+                continue
             cms = _desktop_key_value(text, "X-GFN-CmsId")
             parent = _desktop_key_value(text, "X-GFN-ParentGameId")
             store = _desktop_key_value(text, "X-GFN-AppStore").upper()
             if not cms:
-                # Filename convention: gfn-<cmsId>.desktop
+                # Canonical writer name: gfn-<cmsId>.desktop (numeric cmsId).
                 stem = path.stem  # gfn-102670811
                 if stem.startswith("gfn-"):
                     maybe = stem[4:]

@@ -111,15 +111,38 @@ catalog.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + "\n", encodi
 
 desktop = Path(str(removed.get("desktop") or ""))
 icon = Path(str(removed.get("icon") or ""))
-# Prefer canonical paths from cmsId when catalog paths are stale.
 apps = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "applications"
 icons = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons" / "gfn"
 cand_desktop = apps / f"gfn-{cms}.desktop"
 cand_icon = icons / f"gfn-{cms}.png"
-for path in (desktop, cand_desktop):
-    if path.is_file():
-        path.unlink()
-        print(f"removed {path}")
+
+def desktop_kv(text: str, key: str) -> str:
+    prefix = f"{key}="
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):].strip()
+    return ""
+
+# Remove catalog path + canonical cmsId desktop…
+to_remove = {p for p in (desktop, cand_desktop) if p.is_file()}
+# …and any other plugin-owned gfn-*.desktop that still carries this cmsId
+# (e.g. legacy gfn-<parentGameId>.desktop). Do NOT touch proven
+# gfn-diablo-iv.desktop (no X-Omarchy-Plugin / X-GFN-CmsId).
+if apps.is_dir():
+    for path in apps.glob("gfn-*.desktop"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if desktop_kv(text, "X-Omarchy-Plugin") != "matt-dance.gfn":
+            continue
+        if desktop_kv(text, "X-GFN-CmsId") == cms or path.name == f"gfn-{cms}.desktop":
+            to_remove.add(path)
+
+for path in sorted(to_remove):
+    path.unlink()
+    print(f"removed {path}")
+
 for path in (icon, cand_icon):
     if path.is_file() and str(path).startswith(str(icons)):
         path.unlink()
