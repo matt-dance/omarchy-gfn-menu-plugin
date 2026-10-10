@@ -144,10 +144,11 @@ function writeDesktopEntryCommand(scriptPath, game) {
   // Always pass --short-name so an empty catalog value stays empty
   // (writer must not invent game_gfn_pc).
   argv.push("--short-name", effectiveShortName(g.shortName))
-  if (g.appStore)
-    argv.push("--app-store", String(g.appStore))
-  if (g.boxArt)
-    argv.push("--box-art-url", String(g.boxArt))
+  // Always pass store + box art when present so overlay adds keep icons/labels.
+  argv.push("--app-store", String(g.appStore || ""))
+  var box = String(g.boxArt || "")
+  if (box.length)
+    argv.push("--box-art-url", box)
   return argv
 }
 

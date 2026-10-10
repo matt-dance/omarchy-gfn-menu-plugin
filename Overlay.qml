@@ -160,18 +160,21 @@ Item {
   function activateIndex(index) {
     if (index < 0 || index >= displayModel.count)
       return
-    var row = displayModel.get(index)
+    // Prefer root.results (enriched catalog rows). ListModel.get() has dropped
+    // appStore/boxArt under Quickshell even when those roles were appended.
+    var src = (root.results && root.results.length > index) ? root.results[index] : null
+    var listRow = displayModel.get(index)
     var game = {
-      id: row.gameId,
-      cmsId: row.cmsId,
-      shortName: row.shortName,
-      appStore: row.appStore,
-      boxArt: row.boxArt,
-      title: row.title
+      id: String((src && (src.id || src.gameId)) || (listRow && listRow.gameId) || ""),
+      cmsId: String((src && src.cmsId) || (listRow && listRow.cmsId) || ""),
+      shortName: String((src && src.shortName) || (listRow && listRow.shortName) || ""),
+      appStore: String((src && src.appStore) || (listRow && listRow.appStore) || ""),
+      boxArt: String((src && src.boxArt) || (listRow && listRow.boxArt) || ""),
+      title: String((src && src.title) || (listRow && listRow.title) || "")
     }
     var svc = root.service
-    if (!row.cmsId || !row.gameId) {
-      root.statusText = "“" + row.title + "” has no cmsId yet — resolve from GraphQL catalog"
+    if (!game.cmsId || !game.id) {
+      root.statusText = "“" + game.title + "” has no cmsId yet — resolve from GraphQL catalog"
       return
     }
     if (svc && typeof svc.addToApps === "function") {
