@@ -64,6 +64,7 @@ function enrichRow(row) {
   var boxArt = String(r.boxArt || "")
   var title = String(r.title || "")
   var subtitle = String(r.subtitle || "")
+  var alreadyAdded = !!r.alreadyAdded
   if (!subtitle.length) {
     var sn = shortName.length ? shortName : "(empty)"
     var storePretty = humanizeStore(appStore)
@@ -80,8 +81,80 @@ function enrichRow(row) {
     appStore: appStore,
     boxArt: boxArt,
     title: title,
-    subtitle: subtitle
+    subtitle: subtitle,
+    alreadyAdded: alreadyAdded
   }
+}
+
+/**
+ * Read argv for games.json (added cmsIds). catalogFile is absolute.
+ */
+function catalogReadCommand(catalogFile) {
+  return ["cat", String(catalogFile || "")]
+}
+
+/**
+ * Parse games.json into { cmsId: true, ... }. Never throws.
+ */
+function parseCatalogCmsIds(text) {
+  var out = {}
+  var raw = String(text || "").trim()
+  if (!raw.length)
+    return out
+  try {
+    var parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed.length !== "number")
+      return out
+    for (var i = 0; i < parsed.length; i++) {
+      var cms = String((parsed[i] && parsed[i].cmsId) || "").trim()
+      if (cms.length)
+        out[cms] = true
+    }
+  } catch (e) {}
+  return out
+}
+
+/**
+ * Mark search rows that are already in the local catalog.
+ * IMPORTANT: do NOT filter/hide them — show with "Already added" subtitle.
+ * Safe to call repeatedly (strips a previous mark before re-applying).
+ */
+function markAlreadyAdded(rows, addedCmsIds) {
+  var map = addedCmsIds || {}
+  var list = rows || []
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    var src = list[i] || {}
+    // Drop stale mark so remove → re-search clears the status.
+    var clean = {}
+    for (var k in src)
+      clean[k] = src[k]
+    clean.alreadyAdded = false
+    var sub0 = String(clean.subtitle || "")
+    if (sub0.indexOf("Already added · ") === 0)
+      clean.subtitle = sub0.slice("Already added · ".length)
+    else if (sub0 === "Already added" || sub0 === "game already added")
+      clean.subtitle = ""
+    var row = enrichRow(clean)
+    var cms = String(row.cmsId || "")
+    var added = !!(cms.length && map[cms])
+    row.alreadyAdded = added
+    if (added) {
+      // Keep store/cms details; lead with clear status for the overlay.
+      var base = String(row.subtitle || "")
+      row.subtitle = base.length ? ("Already added · " + base) : "Already added"
+    }
+    out.push(row)
+  }
+  return out
+}
+
+function isAlreadyAdded(cmsId, addedCmsIds) {
+  var cms = String(cmsId || "").trim()
+  if (!cms.length)
+    return false
+  var map = addedCmsIds || {}
+  return !!map[cms]
 }
 
 /**

@@ -41,7 +41,13 @@ Item {
   property int rowHeight: Math.max(Style.space(44), Style.font.title + Style.spacing.md)
 
   function applyResults(rows, pending) {
-    root.results = rows || []
+    // Keep already-added game+store variants visible; Service marks them.
+    var svc = root.service
+    var marked = GfnModel.markAlreadyAdded(
+      rows || [],
+      (svc && svc.addedCmsIds) ? svc.addedCmsIds : {}
+    )
+    root.results = marked
     displayModel.clear()
     for (var i = 0; i < root.results.length; i++) {
       var row = root.results[i]
@@ -52,7 +58,8 @@ Item {
         appStore: String(row.appStore || ""),
         boxArt: String(row.boxArt || ""),
         title: String(row.title || ""),
-        subtitle: String(row.subtitle || "")
+        subtitle: String(row.subtitle || ""),
+        alreadyAdded: !!row.alreadyAdded
       })
     }
 
@@ -96,6 +103,9 @@ Item {
     root.results = []
     displayModel.clear()
     root.statusText = "Type a title, then press Enter to search the GFN catalog (cached ~6h)"
+    // Refresh added cmsIds so Already-added marks match catalog after remove.
+    if (root.service && typeof root.service.refreshCatalog === "function")
+      root.service.refreshCatalog()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -164,24 +174,42 @@ Item {
     // appStore/boxArt under Quickshell even when those roles were appended.
     var src = (root.results && root.results.length > index) ? root.results[index] : null
     var listRow = displayModel.get(index)
+    var svc = root.service
+    var already = !!(src && src.alreadyAdded)
+      || !!(listRow && listRow.alreadyAdded)
+      || !!(svc && GfnModel.isAlreadyAdded(
+        (src && src.cmsId) || (listRow && listRow.cmsId) || "",
+        svc.addedCmsIds
+      ))
     var game = {
       id: String((src && (src.id || src.gameId)) || (listRow && listRow.gameId) || ""),
       cmsId: String((src && src.cmsId) || (listRow && listRow.cmsId) || ""),
       shortName: String((src && src.shortName) || (listRow && listRow.shortName) || ""),
       appStore: String((src && src.appStore) || (listRow && listRow.appStore) || ""),
       boxArt: String((src && src.boxArt) || (listRow && listRow.boxArt) || ""),
-      title: String((src && src.title) || (listRow && listRow.title) || "")
+      title: String((src && src.title) || (listRow && listRow.title) || ""),
+      alreadyAdded: already
     }
     var label = GfnModel.addLabel(game)
-    var svc = root.service
     if (!game.cmsId || !game.id) {
       root.statusText = "“" + label + "” has no cmsId yet — resolve from GraphQL catalog"
       return
     }
+    if (already) {
+      // Refuse re-add: keep desktop/catalog/menu unique per cmsId.
+      root.statusText = "Already added — " + label
+      if (svc && typeof svc.addToApps === "function")
+        svc.addToApps(game) // notify-send + addToApps:already; no writer
+      return
+    }
     if (svc && typeof svc.addToApps === "function") {
       root.statusText = "Adding " + label + "…"
-      if (!svc.addToApps(game))
-        root.statusText = svc.lastError || ("Could not add " + label)
+      if (!svc.addToApps(game)) {
+        if (svc.lastAction === "addToApps:already")
+          root.statusText = "Already added — " + label
+        else
+          root.statusText = svc.lastError || ("Could not add " + label)
+      }
     } else {
       root.statusText = "Service unavailable — cannot write .desktop entry"
     }
@@ -200,6 +228,10 @@ Item {
       else if (svc.lastAction === "addToApps:done") {
         var okLabel = svc.lastAddLabel || "game"
         root.statusText = "Added " + okLabel + " to GeForce NOW"
+        // Remark list so the just-added variant shows Already added (still visible).
+        root.applyResults(svc.lastResults || root.results || [], false)
+      } else if (svc.lastAction === "addToApps:already") {
+        root.statusText = "Already added — " + (svc.lastAddLabel || "game")
       } else if (svc.lastAction === "addToApps:failed") {
         root.statusText = svc.lastError || ("Could not add " + (svc.lastAddLabel || "game"))
       }
@@ -209,6 +241,12 @@ Item {
       if (!svc || svc.lastAction !== "search:done")
         return
       root.applyResults(svc.lastResults || [], false)
+    }
+    function onAddedCmsIdsChanged() {
+      // Remark visible rows after catalog load / post-add refresh (never hide).
+      if (!root.results || !root.results.length)
+        return
+      root.applyResults(root.results, false)
     }
   }
 
@@ -352,6 +390,7 @@ Item {
             required property string boxArt
             required property string title
             required property string subtitle
+            required property bool alreadyAdded
 
             readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
 

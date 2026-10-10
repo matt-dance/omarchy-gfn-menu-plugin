@@ -179,6 +179,8 @@ Rules worth knowing: namespaced non-`omarchy.*` id, every kind has an entry poin
 | `.desktop` writer script | Works — Flatpak `--url-route` `Exec=` + `X-GFN-*` keys |
 | Diablo IV launch ids | Proven Steam `cmsId` `102670811` (variant; not top-level `101069911`) |
 | GFN catalog search | **Works** — `scripts/gfn-catalog-search.py` (GraphQL cache + local filter); Diablo IV offline fallback |
+| Already-added search rows | **Works** — still shown with “Already added”; Enter refuses re-add (`notify-send`); **does not hide** |
+| Remove a game | **Works** — `gum choose --no-limit` multi-select, one confirm, batch desktop/icon/catalog/menu |
 | Auto-merge menu on `plugin add` | **Not supported** by Omarchy — use the install helper (or merge by hand) |
 
 ## Renaming the plugin id

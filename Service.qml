@@ -30,23 +30,46 @@ Item {
   property string lastAddLabel: ""
   property int searchGeneration: 0
   property int searchLimit: 40
+  // cmsId → true for game+store variants already in ~/.local/share/matt-dance.gfn/games.json
+  // Search MUST keep showing these rows (mark, do not hide/filter).
+  property var addedCmsIds: ({})
 
-  function notifyFailure(summary, body) {
+  readonly property string catalogFile: {
+    var home = Quickshell.env("HOME") || ""
+    var xdg = Quickshell.env("XDG_DATA_HOME") || ""
+    var base = xdg.length ? xdg : (home + "/.local/share")
+    return base + "/matt-dance.gfn/games.json"
+  }
+
+  function notifySend(summary, body, urgency) {
     if (notifyProcess.running)
       notifyProcess.running = false
     notifyProcess.command = [
       "notify-send",
       "-a", "GeForce NOW Menu",
-      "-u", "normal",
-      String(summary || "Could not add game"),
+      "-u", String(urgency || "normal"),
+      String(summary || "GeForce NOW Menu"),
       String(body || "")
     ]
     notifyProcess.running = true
   }
 
+  function notifyFailure(summary, body) {
+    root.notifySend(summary || "Could not add game", body || "", "normal")
+  }
+
+  function refreshCatalog() {
+    if (catalogProcess.running)
+      catalogProcess.running = false
+    catalogProcess.command = GfnModel.catalogReadCommand(root.catalogFile)
+    catalogProcess.running = true
+  }
+
   function search(query) {
     // Async: scripts/gfn-catalog-search.py (GraphQL cache + local title filter).
     // Overlay watches lastAction / lastResults. Diablo IV fallback on failure.
+    // Refresh catalog so "Already added" marks stay accurate after remove.
+    root.refreshCatalog()
     root.lastAction = "search:pending"
     root.lastError = ""
     root.lastSearchQuery = String(query || "")
@@ -69,6 +92,7 @@ Item {
   function addToApps(game) {
     // Writes a .desktop entry via the companion script (Flatpak --url-route Exec).
     // Success notify-send lives in write-desktop-entry.sh; failures notify here.
+    // Already-added variants: refuse re-add (no duplicate desktop/catalog/menu).
     root.lastAction = "addToApps"
     root.lastError = ""
     var g = game || {}
@@ -77,6 +101,16 @@ Item {
       root.lastError = "missing cmsId or parentGameId — resolve from GraphQL catalog"
       root.lastAction = "addToApps:failed"
       root.notifyFailure("Could not add game", root.lastError)
+      return false
+    }
+    if (GfnModel.isAlreadyAdded(g.cmsId, root.addedCmsIds) || g.alreadyAdded) {
+      root.lastError = "game already added"
+      root.lastAction = "addToApps:already"
+      root.notifySend(
+        "Already added",
+        root.lastAddLabel + " is already in GeForce NOW Menu",
+        "low"
+      )
       return false
     }
     if (writerProcess.running) {
@@ -89,6 +123,8 @@ Item {
     writerProcess.running = true
     return true
   }
+
+  Component.onCompleted: root.refreshCatalog()
 
   function launch(game) {
     // Proven CEF Flatpak launch (HANDOFF / gfn-play-diablo-iv).
@@ -109,6 +145,25 @@ Item {
   }
 
   Process {
+    id: catalogProcess
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.addedCmsIds = GfnModel.parseCatalogCmsIds(text)
+        // Re-mark visible results when catalog changes (add/remove) without hiding.
+        if (root.lastResults && root.lastResults.length)
+          root.lastResults = GfnModel.markAlreadyAdded(root.lastResults, root.addedCmsIds)
+      }
+    }
+    stderr: StdioCollector { waitForEnd: true }
+    onExited: function(exitCode) {
+      // Missing catalog file → empty map (nothing added yet).
+      if (exitCode !== 0)
+        root.addedCmsIds = root.addedCmsIds || ({})
+    }
+  }
+
+  Process {
     id: searchProcess
     property int generation: 0
 
@@ -118,7 +173,8 @@ Item {
         if (searchProcess.generation !== root.searchGeneration)
           return
         var rows = GfnModel.parseSearchOutput(text, root.lastSearchQuery)
-        root.lastResults = rows
+        // Mark already-added variants; never filter them out of the list.
+        root.lastResults = GfnModel.markAlreadyAdded(rows, root.addedCmsIds)
         root.lastAction = "search:done"
       }
     }
@@ -146,7 +202,10 @@ Item {
           return
         if (root.lastAction !== "search:pending")
           return
-        root.lastResults = GfnModel.filterFallback(root.lastSearchQuery)
+        root.lastResults = GfnModel.markAlreadyAdded(
+          GfnModel.filterFallback(root.lastSearchQuery),
+          root.addedCmsIds
+        )
         if (!root.lastError || !String(root.lastError).length) {
           var script = String(root.searchScript || "")
           root.lastError = "catalog search helper failed to run (" + script + ") — Diablo IV fallback"
@@ -175,6 +234,7 @@ Item {
       if (exitCode === 0) {
         root.lastError = ""
         root.lastAction = "addToApps:done"
+        root.refreshCatalog()
         return
       }
       if (!root.lastError || !String(root.lastError).length)
