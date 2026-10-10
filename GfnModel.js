@@ -84,7 +84,8 @@ function search(query) {
  * Build argv for scripts/gfn-catalog-search.py
  */
 function searchCommand(scriptPath, query, limit) {
-  var argv = ["python3", String(scriptPath)]
+  // Absolute python3 so Quickshell Process does not depend on a thin PATH.
+  var argv = ["/usr/bin/python3", String(scriptPath)]
   var q = String(query || "")
   if (q.length)
     argv.push(q)

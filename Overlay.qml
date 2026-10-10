@@ -20,7 +20,7 @@ Item {
   property int selectedIndex: 0
   property bool cursorActive: false
   property var results: []
-  property string statusText: "GFN catalog search — type a title (cache TTL ~6h)"
+  property string statusText: "GFN catalog search — type a title, then Enter (cache TTL ~6h)"
   property var boundService: null
 
   property color background: Color.menu.background
@@ -83,7 +83,7 @@ Item {
     var err = (svc && svc.lastError) ? String(svc.lastError) : ""
     var q = root.filterText ? String(root.filterText).trim() : ""
     if (!q.length && displayModel.count === 0) {
-      root.statusText = "Type a title to search the GFN catalog (cached ~6h)"
+      root.statusText = "Type a title, then press Enter to search the GFN catalog (cached ~6h)"
       return
     }
     if (displayModel.count === 0) {
@@ -102,8 +102,10 @@ Item {
     root.opened = true
     root.filterText = ""
     root.selectedIndex = 0
-    root.cursorActive = true
-    root.runSearch("")
+    root.cursorActive = false
+    root.results = []
+    displayModel.clear()
+    root.statusText = "Type a title, then press Enter to search the GFN catalog (cached ~6h)"
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -139,10 +141,19 @@ Item {
   }
 
   function setFilter(nextFilter) {
+    // Typing only updates the query string. Enter (Keys Return/Enter) runs
+    // the catalog search Process — see keyCatcher below.
     root.filterText = nextFilter
     root.selectedIndex = 0
-    root.cursorActive = true
-    root.runSearch(nextFilter)
+    root.cursorActive = false
+    var q = nextFilter ? String(nextFilter).trim() : ""
+    if (!q.length) {
+      root.results = []
+      displayModel.clear()
+      root.statusText = "Type a title, then press Enter to search the GFN catalog (cached ~6h)"
+    } else {
+      root.statusText = "Press Enter to search GFN for “" + q + "”"
+    }
   }
 
   function select(delta) {
@@ -254,10 +265,21 @@ Item {
             root.select(1)
             event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (root.cursorActive)
+            // Enter submits catalog search when there is a query and nothing
+            // to activate yet. With results + cursor, Enter writes the Apps
+            // .desktop (activateIndex). Previously cursorActive was forced
+            // true while typing, so Enter always hit activateIndex(0) on an
+            // empty model and silently returned — "Enter does nothing".
+            var q = root.filterText ? String(root.filterText).trim() : ""
+            if (displayModel.count > 0 && root.cursorActive) {
               root.activateIndex(root.selectedIndex)
-            else if (displayModel.count > 0)
+            } else if (q.length) {
+              root.runSearch(q)
+            } else if (displayModel.count > 0) {
               root.cursorActive = true
+            } else {
+              root.statusText = "Type a title, then press Enter to search"
+            }
             event.accepted = true
           } else if (event.text && event.text.length === 1
                      && event.text.charCodeAt(0) >= 32

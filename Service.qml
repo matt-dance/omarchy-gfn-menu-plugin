@@ -108,7 +108,8 @@ Item {
           return
         // Helper prints source=… diagnostics on stderr; keep as soft status, not hard error.
         var msg = String(text || "").trim()
-        if (msg.length && (msg.indexOf("fallback") !== -1 || msg.indexOf("failed") !== -1))
+        if (msg.length && (msg.indexOf("fallback") !== -1 || msg.indexOf("failed") !== -1
+                           || msg.indexOf("No such file") !== -1 || msg.indexOf("not found") !== -1))
           root.lastError = msg
       }
     }
@@ -125,8 +126,10 @@ Item {
         if (root.lastAction !== "search:pending")
           return
         root.lastResults = GfnModel.filterFallback(root.lastSearchQuery)
-        if (!root.lastError || !String(root.lastError).length)
-          root.lastError = "catalog search helper failed to run — Diablo IV fallback"
+        if (!root.lastError || !String(root.lastError).length) {
+          var script = String(root.searchScript || "")
+          root.lastError = "catalog search helper failed to run (" + script + ") — Diablo IV fallback"
+        }
         root.lastAction = "search:done"
       })
     }
