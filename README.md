@@ -14,13 +14,15 @@ The plugin id is `matt-dance.gfn-omarchy`. Omarchy names third-party plugins `au
 
 ## Screenshots
 
-Setup → Plugins on this Omarchy build lists a name and an id. It does not draw images. The community listing at [omarchyplugins.com](https://omarchyplugins.com) uses one file at the repo root, `preview.png` (png, jpg, jpeg, webp, or avif). That file is the search overlay. Both shots are below.
+Setup → Plugins on this Omarchy build lists a name and an id. It does not draw images. The community listing at [plugins.omarchy.org](https://plugins.omarchy.org) uses one file at the repo root, `preview.png` (png, jpg, jpeg, webp, or avif). That file is the Gaming → GeForce NOW menu: search, the installed games, and remove.
+
+![Gaming → GeForce NOW menu with search, two installed games, and Remove a game.](preview.png)
 
 ![Search overlay for Diablo IV. Steam is already on the menu. Battle.net shows the store.](docs/screenshots/searching.png)
 
 ![Apps menu row for the added game, with the Diablo IV box art from the desktop icon.](docs/screenshots/added-game.png)
 
-The box art is the desktop `Icon`. The Apps menu draws that image. Gaming → GeForce NOW rows only get a font glyph, so they cannot show the box art. The store is the menu row's `description` and the desktop `Comment`. While you browse, this Omarchy menu draws the title only. It draws a second line only while the menu filter is active, and that line is the menu path, not the store. The store subtitle shows on the search result, as in the first shot.
+The box art is the desktop `Icon`. The Apps menu draws that image. Gaming → GeForce NOW rows only get a font glyph, so they cannot show the box art. The store is the menu row's `description` and the desktop `Comment`. While you browse, this Omarchy menu draws the title only. It draws a second line only while the menu filter is active, and that line is the menu path, not the store. The store subtitle shows on the search result, as in the search shot.
 
 Search, add, multi-remove, and direct launch work. Search fetches and caches the public GraphQL apps list (`games.geforce.com/graphql`, US/`en_US`, TTL ~6h) and filters locally by title. This repo does not invent authenticated GFN search or library APIs. A game that is already on the menu still appears in search, with the subtitle `game already added`, and Enter does not add it again. Menu and desktop names are `GFN - <Game Name>`, with the store as the subtitle. Launch goes through `scripts/gfn-play.sh`. Offline or cache failure falls back to Diablo IV.
 
@@ -216,7 +218,7 @@ Also remove any Games rows (or the `BEGIN`/`END matt-dance.gfn-omarchy` managed 
 ```text
 .
 ├── manifest.json
-├── preview.png              # marketplace card (same shot as docs/screenshots/searching.png)
+├── preview.png              # marketplace card: Gaming menu with search, games, and remove
 ├── Overlay.qml              # overlay entry point (search UI)
 ├── Service.qml              # service entry point (add / --url-route launch)
 ├── GfnModel.js              # search/launch/writer helpers + Diablo IV fallback
