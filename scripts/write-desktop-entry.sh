@@ -222,4 +222,13 @@ if [[ -x "${SCRIPT_DIR}/sync-menu-games.sh" ]]; then
   "${SCRIPT_DIR}/sync-menu-games.sh" >/dev/null || true
 fi
 
+# Desktop notification so overlay Enter-add is visible even without UI focus.
+NOTIFY_TITLE="Added ${GAME_TITLE} to GeForce NOW"
+if [[ -n "$STORE_PRETTY" ]]; then
+  NOTIFY_TITLE="Added ${STORE_PRETTY} · ${GAME_TITLE} to GeForce NOW"
+fi
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send -a "GeForce NOW Menu" "$NOTIFY_TITLE" "Gaming → GeForce NOW · Apps" || true
+fi
+
 echo "$DESKTOP_PATH"

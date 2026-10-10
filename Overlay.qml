@@ -172,16 +172,16 @@ Item {
       boxArt: String((src && src.boxArt) || (listRow && listRow.boxArt) || ""),
       title: String((src && src.title) || (listRow && listRow.title) || "")
     }
+    var label = GfnModel.addLabel(game)
     var svc = root.service
     if (!game.cmsId || !game.id) {
-      root.statusText = "“" + game.title + "” has no cmsId yet — resolve from GraphQL catalog"
+      root.statusText = "“" + label + "” has no cmsId yet — resolve from GraphQL catalog"
       return
     }
     if (svc && typeof svc.addToApps === "function") {
-      if (svc.addToApps(game))
-        root.statusText = "Added “" + game.title + "” to Gaming → GeForce NOW (and Apps)"
-      else
-        root.statusText = svc.lastError || "Could not write .desktop entry"
+      root.statusText = "Adding " + label + "…"
+      if (!svc.addToApps(game))
+        root.statusText = svc.lastError || ("Could not add " + label)
     } else {
       root.statusText = "Service unavailable — cannot write .desktop entry"
     }
@@ -197,6 +197,12 @@ Item {
         root.statusText = "Searching GFN catalog…"
       else if (svc.lastAction === "search:done")
         root.applyResults(svc.lastResults || [], false)
+      else if (svc.lastAction === "addToApps:done") {
+        var okLabel = svc.lastAddLabel || "game"
+        root.statusText = "Added " + okLabel + " to GeForce NOW"
+      } else if (svc.lastAction === "addToApps:failed") {
+        root.statusText = svc.lastError || ("Could not add " + (svc.lastAddLabel || "game"))
+      }
     }
     function onLastResultsChanged() {
       var svc = root.service
@@ -263,18 +269,18 @@ Item {
             root.select(1)
             event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            // Enter submits catalog search when there is a query and nothing
-            // to activate yet. With results + cursor, Enter writes the Apps
-            // .desktop (activateIndex). Previously cursorActive was forced
-            // true while typing, so Enter always hit activateIndex(0) on an
-            // empty model and silently returned — "Enter does nothing".
+            // Dual-mode Enter:
+            //   • results visible → always activate/add the selected row
+            //   • no results + query → catalog search
+            // Requiring cursorActive made post-search Enter look like a no-op
+            // (only enabled the highlight, or re-ran search).
             var q = root.filterText ? String(root.filterText).trim() : ""
-            if (displayModel.count > 0 && root.cursorActive) {
+            if (displayModel.count > 0) {
+              if (!root.cursorActive)
+                root.cursorActive = true
               root.activateIndex(root.selectedIndex)
             } else if (q.length) {
               root.runSearch(q)
-            } else if (displayModel.count > 0) {
-              root.cursorActive = true
             } else {
               root.statusText = "Type a title, then press Enter to search"
             }

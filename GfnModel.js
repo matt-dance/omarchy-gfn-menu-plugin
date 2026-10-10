@@ -28,6 +28,33 @@ function diabloFallback() {
   ]
 }
 
+/**
+ * Humanize catalog appStore codes for UI / notify-send (Steam not STEAM).
+ */
+function humanizeStore(appStore) {
+  var su = String(appStore || "").trim().toUpperCase()
+  if (su === "STEAM") return "Steam"
+  if (su === "BATTLENET") return "Battle.net"
+  if (su === "EPIC") return "Epic"
+  if (su === "GOG") return "GOG"
+  if (su === "UPLAY" || su === "UBISOFT") return "Ubisoft"
+  if (su === "EA") return "EA"
+  if (!su.length) return ""
+  // Title-case unknown store tokens.
+  return String(appStore || "").charAt(0).toUpperCase()
+    + String(appStore || "").slice(1).toLowerCase()
+}
+
+/**
+ * Label used in overlay status + notify: "Steam · Diablo IV".
+ */
+function addLabel(game) {
+  var g = game || {}
+  var title = String(g.title || "game").trim() || "game"
+  var store = humanizeStore(g.appStore)
+  return store.length ? (store + " · " + title) : title
+}
+
 function enrichRow(row) {
   var r = row || {}
   var id = String(r.id || r.parentGameId || "")
@@ -39,13 +66,7 @@ function enrichRow(row) {
   var subtitle = String(r.subtitle || "")
   if (!subtitle.length) {
     var sn = shortName.length ? shortName : "(empty)"
-    var storePretty = appStore
-    var su = appStore.toUpperCase()
-    if (su === "STEAM") storePretty = "Steam"
-    else if (su === "BATTLENET") storePretty = "Battle.net"
-    else if (su === "EPIC") storePretty = "Epic"
-    else if (su === "GOG") storePretty = "GOG"
-    else if (su === "UPLAY" || su === "UBISOFT") storePretty = "Ubisoft"
+    var storePretty = humanizeStore(appStore)
     // Store first — overlay ElideRight was clipping store off long titles.
     var store = storePretty.length ? (storePretty + " · ") : ""
     subtitle = cmsId.length
