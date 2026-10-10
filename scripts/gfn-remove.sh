@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Remove a GeForce NOW Menu game: desktop entry, icon, catalog row, menu sync.
+# Remove one or more GeForce NOW Menu games: desktop, icon, catalog, menu sync.
 # Intended for: omarchy-launch-floating-terminal-with-presentation …
+# Matt UX: gum multi-select → one confirm → remove all selected.
 
 set -euo pipefail
 
@@ -42,24 +43,54 @@ if [[ ${#CHOICES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-PICK="$(printf '%s\n' "${CHOICES[@]}" | gum choose --header "Remove which GeForce NOW game?" --height 15)" || {
+PICKS="$(printf '%s\n' "${CHOICES[@]}" | gum choose --no-limit --header "Remove which GeForce NOW game(s)? (space to select, enter to confirm)" --height 15)" || {
   echo "Cancelled."
   exit 0
 }
 
-CMS_ID="$(printf '%s' "$PICK" | sed -n 's/.*\[\([0-9][0-9]*\)\]$/\1/p')"
-if [[ -z "$CMS_ID" ]]; then
-  echo "Could not parse selection: $PICK" >&2
-  exit 1
-fi
-
-LABEL="${PICK% \[*}"
-if ! gum confirm "Remove “${LABEL}” from the GeForce NOW menu and Apps?"; then
+if [[ -z "${PICKS//[$'\t\n\r ']/}" ]]; then
   echo "Cancelled."
   exit 0
 fi
 
-python3 - "$CATALOG" "$CMS_ID" <<'PY'
+mapfile -t SELECTED < <(printf '%s\n' "$PICKS")
+# Drop empty lines from gum output.
+CLEAN=()
+for line in "${SELECTED[@]}"; do
+  [[ -n "${line//[$'\t\r ']/}" ]] && CLEAN+=("$line")
+done
+SELECTED=("${CLEAN[@]}")
+
+if [[ ${#SELECTED[@]} -eq 0 ]]; then
+  echo "Cancelled."
+  exit 0
+fi
+
+COUNT="${#SELECTED[@]}"
+if [[ "$COUNT" -eq 1 ]]; then
+  LABEL_PREVIEW="${SELECTED[0]% \[*}"
+  CONFIRM_MSG="Remove “${LABEL_PREVIEW}” from the GeForce NOW menu and Apps?"
+else
+  CONFIRM_MSG="Remove ${COUNT} selected games from the GeForce NOW menu and Apps?"
+fi
+
+if ! gum confirm "$CONFIRM_MSG"; then
+  echo "Cancelled."
+  exit 0
+fi
+
+REMOVED_LABELS=()
+FAILED=0
+for PICK in "${SELECTED[@]}"; do
+  CMS_ID="$(printf '%s' "$PICK" | sed -n 's/.*\[\([0-9][0-9]*\)\]$/\1/p')"
+  if [[ -z "$CMS_ID" ]]; then
+    echo "Could not parse selection: $PICK" >&2
+    FAILED=1
+    continue
+  fi
+  LABEL="${PICK% \[*}"
+
+  if ! python3 - "$CATALOG" "$CMS_ID" <<'PY'
 import json, os, sys
 from pathlib import Path
 
@@ -80,31 +111,80 @@ catalog.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + "\n", encodi
 
 desktop = Path(str(removed.get("desktop") or ""))
 icon = Path(str(removed.get("icon") or ""))
-# Prefer canonical paths from cmsId when catalog paths are stale.
 apps = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "applications"
 icons = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "icons" / "gfn"
 cand_desktop = apps / f"gfn-{cms}.desktop"
 cand_icon = icons / f"gfn-{cms}.png"
-for path in (desktop, cand_desktop):
-    if path.is_file():
-        path.unlink()
-        print(f"removed {path}")
+
+def desktop_kv(text: str, key: str) -> str:
+    prefix = f"{key}="
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):].strip()
+    return ""
+
+# Remove catalog path + canonical cmsId desktop…
+to_remove = {p for p in (desktop, cand_desktop) if p.is_file()}
+# …and any other plugin-owned gfn-*.desktop that still carries this cmsId
+# (e.g. legacy gfn-<parentGameId>.desktop). Do NOT touch proven
+# gfn-diablo-iv.desktop (no X-Omarchy-Plugin / X-GFN-CmsId).
+if apps.is_dir():
+    for path in apps.glob("gfn-*.desktop"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if desktop_kv(text, "X-Omarchy-Plugin") != "matt-dance.gfn":
+            continue
+        if desktop_kv(text, "X-GFN-CmsId") == cms or path.name == f"gfn-{cms}.desktop":
+            to_remove.add(path)
+
+for path in sorted(to_remove):
+    path.unlink()
+    print(f"removed {path}")
+
 for path in (icon, cand_icon):
     if path.is_file() and str(path).startswith(str(icons)):
         path.unlink()
         print(f"removed {path}")
 print(f"removed catalog row cmsId={cms}")
 PY
+  then
+    FAILED=1
+    continue
+  fi
+  REMOVED_LABELS+=("$LABEL")
+done
 
 if [[ -x "${SCRIPT_DIR}/sync-menu-games.sh" ]]; then
   "${SCRIPT_DIR}/sync-menu-games.sh"
 fi
 
-echo "Done. “${LABEL}” removed from GeForce NOW Menu / Apps."
-if command -v notify-send >/dev/null 2>&1; then
-  notify-send -a "GeForce NOW Menu" "Removed GFN game" "$LABEL" || true
+if [[ ${#REMOVED_LABELS[@]} -eq 0 ]]; then
+  echo "Nothing removed." >&2
+  exit 1
 fi
+
+if [[ ${#REMOVED_LABELS[@]} -eq 1 ]]; then
+  SUMMARY="${REMOVED_LABELS[0]}"
+  echo "Done. “${SUMMARY}” removed from GeForce NOW Menu / Apps."
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a "GeForce NOW Menu" "Removed GFN game" "$SUMMARY" || true
+  fi
+else
+  SUMMARY="${#REMOVED_LABELS[@]} games"
+  echo "Done. Removed ${#REMOVED_LABELS[@]} GeForce NOW games:"
+  for L in "${REMOVED_LABELS[@]}"; do
+    echo "  - $L"
+  done
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a "GeForce NOW Menu" "Removed ${#REMOVED_LABELS[@]} GFN games" "$(printf '%s\n' "${REMOVED_LABELS[@]}")" || true
+  fi
+fi
+
 # Keep the floating terminal readable for a moment when launched from the menu.
 if [[ -t 0 ]] && command -v gum >/dev/null 2>&1; then
   gum input --placeholder "Press Enter to close" --prompt "" >/dev/null 2>&1 || true
 fi
+
+exit "$FAILED"

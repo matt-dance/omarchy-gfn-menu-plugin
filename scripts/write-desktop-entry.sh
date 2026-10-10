@@ -137,7 +137,7 @@ PLAY_SCRIPT="${SCRIPT_DIR}/gfn-play.sh"
 dq() { escape_exec_quoted "$1"; }
 EXEC_LINE="bash \"$(dq "$PLAY_SCRIPT")\" --cms-id \"$(dq "$CMS_ID")\" --parent-game-id \"$(dq "$PARENT_GAME_ID")\" --short-name \"$(dq "$SHORT_NAME")\" --title \"$(dq "$GAME_TITLE")\""
 
-# Apps grid identity: store-first so names stay readable when truncated.
+# Matt UX: primary "GFN - <Game>"; store is the small print (Comment).
 STORE_PRETTY="$(printf '%s' "$APP_STORE" | tr '[:lower:]' '[:upper:]')"
 case "$STORE_PRETTY" in
   STEAM) STORE_PRETTY="Steam" ;;
@@ -148,11 +148,11 @@ case "$STORE_PRETTY" in
   EA) STORE_PRETTY="EA" ;;
   "") STORE_PRETTY="" ;;
 esac
+DISPLAY_NAME="$(escape_desktop_string "GFN - ${GAME_TITLE}")"
 if [[ -n "$STORE_PRETTY" ]]; then
-  DISPLAY_NAME="$(escape_desktop_string "${STORE_PRETTY} · ${GAME_TITLE} · GFN")"
-  COMMENT="$(escape_desktop_string "${STORE_PRETTY} · GeForce NOW")"
+  COMMENT="$(escape_desktop_string "${STORE_PRETTY}")"
 else
-  DISPLAY_NAME="$(escape_desktop_string "${GAME_TITLE} · GFN")"
+  COMMENT="$(escape_desktop_string "GeForce NOW")"
 fi
 
 cat >"$DESKTOP_PATH" <<EOF
@@ -160,7 +160,7 @@ cat >"$DESKTOP_PATH" <<EOF
 Type=Application
 Version=1.0
 Name=${DISPLAY_NAME}
-GenericName=${SAFE_TITLE} on GeForce NOW
+GenericName=${SAFE_TITLE}
 Comment=${COMMENT}
 Exec=${EXEC_LINE}
 Icon=${ICON_VALUE}
@@ -223,12 +223,13 @@ if [[ -x "${SCRIPT_DIR}/sync-menu-games.sh" ]]; then
 fi
 
 # Desktop notification so overlay Enter-add is visible even without UI focus.
-NOTIFY_TITLE="Added ${GAME_TITLE} to GeForce NOW"
+NOTIFY_TITLE="Added GFN - ${GAME_TITLE}"
+NOTIFY_BODY="Gaming → GeForce NOW"
 if [[ -n "$STORE_PRETTY" ]]; then
-  NOTIFY_TITLE="Added ${STORE_PRETTY} · ${GAME_TITLE} to GeForce NOW"
+  NOTIFY_BODY="${STORE_PRETTY} · Gaming → GeForce NOW"
 fi
 if command -v notify-send >/dev/null 2>&1; then
-  notify-send -a "GeForce NOW Menu" "$NOTIFY_TITLE" "Gaming → GeForce NOW · Apps" || true
+  notify-send -a "GeForce NOW Menu" "$NOTIFY_TITLE" "$NOTIFY_BODY" || true
 fi
 
 echo "$DESKTOP_PATH"

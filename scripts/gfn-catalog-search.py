@@ -7,9 +7,11 @@ Does NOT call authenticated searchQuery or library APIs.
 Usage:
   gfn-catalog-search.py [query] [--limit N] [--refresh] [--cache-dir DIR]
 
-Stdout: JSON array of {id, cmsId, title, shortName, appStore}
+Stdout: JSON array of {id, cmsId, title, shortName, appStore, alreadyAdded?}
   cmsId is a *variant* id (Steam preferred), not the top-level GFNDB-style id.
   shortName may be "" — empty is valid for --url-route (do not invent game_gfn_pc).
+  alreadyAdded is true when the game+store is already in games.json / gfn desktops
+  (rows stay in results; UI labels them — do not hide).
 
 Exit codes:
   0  success (may be offline Diablo IV fallback; see stderr)
@@ -76,6 +78,108 @@ def default_cache_dir() -> Path:
         return Path(xdg) / "matt-dance.gfn"
     home = Path.home()
     return home / ".cache" / "matt-dance.gfn"
+
+
+def default_state_dir() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME")
+    if xdg:
+        return Path(xdg) / "matt-dance.gfn"
+    return Path.home() / ".local" / "share" / "matt-dance.gfn"
+
+
+def default_apps_dir() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME")
+    if xdg:
+        return Path(xdg) / "applications"
+    return Path.home() / ".local" / "share" / "applications"
+
+
+def _desktop_key_value(text: str, key: str) -> str:
+    prefix = f"{key}="
+    for line in text.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip()
+    return ""
+
+
+def load_already_added(
+    state_dir: Path | None = None,
+    apps_dir: Path | None = None,
+) -> tuple[set[str], set[tuple[str, str]]]:
+    """Return (cmsIds, {(parentGameId, APPSTORE)}) already installed locally.
+
+    Match games.json catalog rows and plugin desktops (gfn-<cmsId>.desktop /
+    X-GFN-* keys). Used only to label search rows — never to hide them.
+    """
+    state = state_dir if state_dir is not None else default_state_dir()
+    apps = apps_dir if apps_dir is not None else default_apps_dir()
+    cms_ids: set[str] = set()
+    game_stores: set[tuple[str, str]] = set()
+
+    catalog = state / "games.json"
+    if catalog.is_file():
+        try:
+            raw = json.loads(catalog.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            raw = None
+        if isinstance(raw, list):
+            for g in raw:
+                if not isinstance(g, dict):
+                    continue
+                cms = str(g.get("cmsId") or "").strip()
+                parent = str(g.get("parentGameId") or g.get("id") or "").strip()
+                store = str(g.get("appStore") or "").strip().upper()
+                if cms:
+                    cms_ids.add(cms)
+                if parent and store:
+                    game_stores.add((parent, store))
+
+    if apps.is_dir():
+        for path in apps.glob("gfn-*.desktop"):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            # Only plugin-owned desktops (not legacy proven ~/.local/bin launchers).
+            if _desktop_key_value(text, "X-Omarchy-Plugin") != "matt-dance.gfn":
+                continue
+            cms = _desktop_key_value(text, "X-GFN-CmsId")
+            parent = _desktop_key_value(text, "X-GFN-ParentGameId")
+            store = _desktop_key_value(text, "X-GFN-AppStore").upper()
+            if not cms:
+                # Canonical writer name: gfn-<cmsId>.desktop (numeric cmsId).
+                stem = path.stem  # gfn-102670811
+                if stem.startswith("gfn-"):
+                    maybe = stem[4:]
+                    if maybe.isdigit():
+                        cms = maybe
+            if cms:
+                cms_ids.add(cms)
+            if parent and store:
+                game_stores.add((parent, store))
+
+    return cms_ids, game_stores
+
+
+def annotate_already_added(
+    rows: list[dict[str, str]],
+    cms_ids: set[str],
+    game_stores: set[tuple[str, str]],
+) -> list[dict[str, Any]]:
+    """Keep every row; set alreadyAdded for game+store already installed."""
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        cms = str(row.get("cmsId") or "").strip()
+        parent = str(row.get("id") or "").strip()
+        store = str(row.get("appStore") or "").strip().upper()
+        already = bool(cms and cms in cms_ids) or bool(
+            parent and store and (parent, store) in game_stores
+        )
+        annotated: dict[str, Any] = dict(row)
+        if already:
+            annotated["alreadyAdded"] = True
+        out.append(annotated)
+    return out
 
 
 def cache_path(cache_dir: Path) -> Path:
@@ -339,12 +443,17 @@ def main(argv: list[str] | None = None) -> int:
     cache_dir = args.cache_dir if args.cache_dir is not None else default_cache_dir()
     items, source = resolve_catalog(cache_dir, refresh=args.refresh)
     results = filter_items(items, args.query, args.limit)
+    cms_ids, game_stores = load_already_added()
+    results = annotate_already_added(results, cms_ids, game_stores)
+    already_n = sum(1 for r in results if r.get("alreadyAdded"))
 
     print(
-        f"gfn-catalog-search: source={source} catalog={len(items)} matches={len(results)}",
+        f"gfn-catalog-search: source={source} catalog={len(items)} "
+        f"matches={len(results)} alreadyAdded={already_n}",
         file=sys.stderr,
     )
     # Machine-readable results only on stdout (single JSON value).
+    # Already-added rows stay in the list (labeled by the overlay).
     json.dump(results, sys.stdout, ensure_ascii=False, separators=(",", ":"))
     sys.stdout.write("\n")
     return 0

@@ -31,17 +31,29 @@ Item {
   property int searchGeneration: 0
   property int searchLimit: 40
 
-  function notifyFailure(summary, body) {
+  function notifySend(summary, body) {
     if (notifyProcess.running)
       notifyProcess.running = false
     notifyProcess.command = [
       "notify-send",
       "-a", "GeForce NOW Menu",
       "-u", "normal",
-      String(summary || "Could not add game"),
+      String(summary || ""),
       String(body || "")
     ]
     notifyProcess.running = true
+  }
+
+  function notifyFailure(summary, body) {
+    root.notifySend(summary || "Could not add game", body || "")
+  }
+
+  function notifyAlreadyAdded(game) {
+    var label = GfnModel.addLabel(game)
+    root.lastAddLabel = label
+    root.lastError = "Already added"
+    root.lastAction = "addToApps:already"
+    root.notifySend("Already added", label)
   }
 
   function search(query) {
@@ -69,10 +81,15 @@ Item {
   function addToApps(game) {
     // Writes a .desktop entry via the companion script (Flatpak --url-route Exec).
     // Success notify-send lives in write-desktop-entry.sh; failures notify here.
+    // Already-added game+store: keep the search row visible; refuse re-add.
     root.lastAction = "addToApps"
     root.lastError = ""
     var g = game || {}
     root.lastAddLabel = GfnModel.addLabel(g)
+    if (GfnModel.isAlreadyAdded(g)) {
+      root.notifyAlreadyAdded(g)
+      return false
+    }
     if (!g.cmsId || !(g.id || g.parentGameId)) {
       root.lastError = "missing cmsId or parentGameId — resolve from GraphQL catalog"
       root.lastAction = "addToApps:failed"
