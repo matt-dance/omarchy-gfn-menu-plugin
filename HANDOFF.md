@@ -115,6 +115,7 @@ Omarchy end-user rules, if Cursor can see them, are in `/home/mdance/.agents/ski
 
 - `~/.local/bin/launch-wow`, `~/.local/bin/launch-battlenet`, `~/.local/bin/battlenet-nvidia.sh`. WoW classic beta is Proton (GE-Proton), D3D12, prefix `~/Games/battlenet`. Do not set `__GLX_VENDOR_LIBRARY_NAME=nvidia`. Packaged `nvidia.lua` sets that into the user environment at login. The WoW launcher unsets it because Wine then fails `X_GLXCreateContext` and no window appears.
 - Hybrid GPU: Intel Arc `8086:7d51` drives the internal panel (`renderD129`). RTX 5070 Max-Q `10de:2d18` is render-only (`renderD128`). GeForce NOW already picks the NVIDIA GPU through the flatpak. Do not invent offload vars for it.
+- GeForce NOW's SDL audio init blocks until WirePlumber grants its Flatpak PipeWire client permissions. After a sound-driver reload (resume) on 2026-10-09, WirePlumber left both cards Off and never granted them (`pw-cli get-permissions <client>` showed `default: -----`). GFN then created a 1248x800 X11 window that never painted, so Hyprland never listed it. `systemctl --user restart wireplumber` fixes it. `gfn-play.sh` detects this, restarts WirePlumber once, and relaunches. An X11 `GeForceNOW` window that Hyprland does not list is a hung instance, not an open session.
 - The plain GeForce NOW library launcher.
 - Root needs a password. A reboot was not authorized.
 - Do not kill WoW or a live GeForce NOW stream as part of development.
