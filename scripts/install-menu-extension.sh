@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-PLUGIN_ID="matt-dance.gfn"
+PLUGIN_ID="matt-dance.gfn-omarchy"
 BEGIN_MARK="// BEGIN ${PLUGIN_ID}"
 END_MARK="// END ${PLUGIN_ID}"
 

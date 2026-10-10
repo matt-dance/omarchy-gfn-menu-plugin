@@ -47,7 +47,7 @@ COUNTRY = "US"
 LANGUAGE = "en_US"
 TTL_SECONDS = 6 * 60 * 60  # ~6h
 DEFAULT_LIMIT = 40
-USER_AGENT = "matt-dance.gfn-catalog-search/0.1 (+Omarchy plugin)"
+USER_AGENT = "matt-dance.gfn-omarchy-catalog-search/0.1 (+Omarchy plugin)"
 # Bump when row shape / cmsId selection changes (invalidates old caches).
 CACHE_VERSION = "v3"
 
@@ -75,16 +75,16 @@ APPS_QUERY = (
 def default_cache_dir() -> Path:
     xdg = os.environ.get("XDG_CACHE_HOME")
     if xdg:
-        return Path(xdg) / "matt-dance.gfn"
+        return Path(xdg) / "matt-dance.gfn-omarchy"
     home = Path.home()
-    return home / ".cache" / "matt-dance.gfn"
+    return home / ".cache" / "matt-dance.gfn-omarchy"
 
 
 def default_state_dir() -> Path:
     xdg = os.environ.get("XDG_DATA_HOME")
     if xdg:
-        return Path(xdg) / "matt-dance.gfn"
-    return Path.home() / ".local" / "share" / "matt-dance.gfn"
+        return Path(xdg) / "matt-dance.gfn-omarchy"
+    return Path.home() / ".local" / "share" / "matt-dance.gfn-omarchy"
 
 
 def default_apps_dir() -> Path:
@@ -141,7 +141,7 @@ def load_already_added(
             except OSError:
                 continue
             # Only plugin-owned desktops (not legacy proven ~/.local/bin launchers).
-            if _desktop_key_value(text, "X-Omarchy-Plugin") != "matt-dance.gfn":
+            if _desktop_key_value(text, "X-Omarchy-Plugin") != "matt-dance.gfn-omarchy":
                 continue
             cms = _desktop_key_value(text, "X-GFN-CmsId")
             parent = _desktop_key_value(text, "X-GFN-ParentGameId")
@@ -432,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
         "--cache-dir",
         type=Path,
         default=None,
-        help="Cache directory (default: $XDG_CACHE_HOME/matt-dance.gfn)",
+        help="Cache directory (default: $XDG_CACHE_HOME/matt-dance.gfn-omarchy)",
     )
     args = parser.parse_args(argv)
 

@@ -15,7 +15,7 @@ Item {
   // Absolute path to this plugin once installed under ~/.config/omarchy/plugins/
   readonly property string pluginDir: {
     var home = Quickshell.env("HOME") || ""
-    var id = (root.manifest && root.manifest.id) ? root.manifest.id : "matt-dance.gfn"
+    var id = (root.manifest && root.manifest.id) ? root.manifest.id : "matt-dance.gfn-omarchy"
     return home + "/.config/omarchy/plugins/" + id
   }
 

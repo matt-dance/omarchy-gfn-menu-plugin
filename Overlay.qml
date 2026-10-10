@@ -6,7 +6,7 @@ import qs.Ui
 import "GfnModel.js" as GfnModel
 
 // Fullscreen search overlay for GeForce NOW titles.
-// Summon: omarchy-shell shell summon matt-dance.gfn '{}'
+// Summon: omarchy-shell shell summon matt-dance.gfn-omarchy '{}'
 Item {
   id: root
 
@@ -107,7 +107,7 @@ Item {
   function dismiss() {
     root.opened = false
     if (root.shell && typeof root.shell.hide === "function")
-      root.shell.hide((root.manifest && root.manifest.id) || "matt-dance.gfn")
+      root.shell.hide((root.manifest && root.manifest.id) || "matt-dance.gfn-omarchy")
   }
 
   function toggle() {
