@@ -13,7 +13,7 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y desktop-file-utils shellcheck
+          sudo apt-get install -y desktop-file-utils shellcheck imagemagick
 
       - name: Shellcheck
         run: |
@@ -26,3 +26,22 @@ jobs:
 
       - name: Catalog search tests
         run: python3 tests/test-gfn-catalog-search.py
+
+  # Omarchy ships ImageMagick 7 (`magick`). Ubuntu's imagemagick package is IM6.
+  scripts-im7:
+    name: scripts (ImageMagick 7)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install tools
+        run: pacman -Sy --noconfirm --needed git imagemagick bash desktop-file-utils python
+
+      - uses: actions/checkout@v4
+
+      - name: Show ImageMagick
+        run: |
+          magick -version
+          magick -version | grep -q 'ImageMagick 7'
+
+      - name: Desktop-entry security tests
+        run: bash tests/test-write-desktop-entry.sh

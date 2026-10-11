@@ -29,8 +29,18 @@ FORCE=0
 readonly GFN_ID_RE='^[A-Za-z0-9._-]{1,64}$'
 # Box art: https only, no controls / whitespace / quotes (curl + Icon=).
 readonly GFN_HTTPS_RE='^https://[A-Za-z0-9._~:/?#@!$&*+,;=%-]+$'
-# 2 MiB: box-art download cap (curl --max-filesize).
+# 2 MiB: box-art download cap (curl --max-filesize). Does not bound decoded pixels.
 readonly GFN_BOXART_MAX_BYTES=2097152
+# Decode bounds: a compact file can declare huge IHDR/SOF dimensions. Catalog art
+# is typically ~628x888; 4K / 16MP is a generous ceiling before we refuse.
+readonly GFN_BOXART_MAX_WIDTH=4096
+readonly GFN_BOXART_MAX_HEIGHT=4096
+readonly GFN_BOXART_MAX_PIXELS=16777216
+readonly GFN_BOXART_IM_MEMORY="256MiB"
+readonly GFN_BOXART_IM_MAP="256MiB"
+readonly GFN_BOXART_IM_DISK="256MiB"
+readonly GFN_BOXART_IM_TIME=8
+readonly GFN_BOXART_TIMEOUT=10
 
 is_safe_id() {
   [[ -n "$1" && "$1" =~ $GFN_ID_RE ]]
@@ -104,6 +114,96 @@ require_optional_id() {
     echo "error: ${name} must be empty or match ${GFN_ID_RE} (got $(printf '%q' "$value"))" >&2
     exit 2
   fi
+}
+
+# Wall-clock cap around ImageMagick. -limit time is CPU-ish; timeout is elapsed.
+gfn_run_im() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --kill-after=2s "$GFN_BOXART_TIMEOUT" "$@"
+  else
+    "$@"
+  fi
+}
+
+# Shared -limit argv for IM6 (identify/convert) and IM7 (magick …).
+# Width/height omitted when $1 is "ping" so identify can report declared size.
+gfn_im_limit_args() {
+  if [[ "${1:-}" != ping ]]; then
+    printf '%s\n' \
+      -limit width "$GFN_BOXART_MAX_WIDTH" \
+      -limit height "$GFN_BOXART_MAX_HEIGHT"
+  fi
+  printf '%s\n' \
+    -limit area "$GFN_BOXART_MAX_PIXELS" \
+    -limit memory "$GFN_BOXART_IM_MEMORY" \
+    -limit map "$GFN_BOXART_IM_MAP" \
+    -limit disk "$GFN_BOXART_IM_DISK" \
+    -limit list-length 4 \
+    -limit time "$GFN_BOXART_IM_TIME"
+}
+
+# Header-only width/height (no pixel cache).
+# IM7 requires the subcommand first: `magick identify -limit … -ping file`.
+# `magick -limit … identify …` treats "identify" as an input filename.
+gfn_box_art_ping() {
+  local src="$1" out=""
+  local -a limits=()
+  mapfile -t limits < <(gfn_im_limit_args ping)
+  if command -v magick >/dev/null 2>&1; then
+    out="$(gfn_run_im magick identify "${limits[@]}" -ping -format '%w %h' "$src")" || return 1
+  elif command -v identify >/dev/null 2>&1; then
+    out="$(gfn_run_im identify "${limits[@]}" -ping -format '%w %h' "$src")" || return 1
+  else
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
+gfn_box_art_dims_ok() {
+  local raw="$1" w h extra
+  raw="${raw//$'\r'/}"
+  raw="${raw//$'\n'/ }"
+  read -r w h extra <<<"$raw"
+  if [[ -n "${extra:-}" || ! "$w" =~ ^[1-9][0-9]*$ || ! "$h" =~ ^[1-9][0-9]*$ ]]; then
+    return 1
+  fi
+  if ((10#$w > GFN_BOXART_MAX_WIDTH || 10#$h > GFN_BOXART_MAX_HEIGHT || 10#$w * 10#$h > GFN_BOXART_MAX_PIXELS)); then
+    echo "warning: rejecting box art for $CMS_ID (${w}x${h} exceeds decode limits)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Full decode + resize. Limits must precede the input so they bind the decoder.
+# IM7: `magick -limit … src -resize …` (no subcommand). IM6: `convert -limit …`.
+gfn_box_art_resize() {
+  local src="$1" dest="$2"
+  local -a limits=()
+  mapfile -t limits < <(gfn_im_limit_args)
+  if command -v magick >/dev/null 2>&1; then
+    gfn_run_im magick "${limits[@]}" "$src" -resize '362x512>' -strip "PNG32:${dest}"
+  elif command -v convert >/dev/null 2>&1; then
+    gfn_run_im convert "${limits[@]}" "$src" -resize '362x512>' -strip "PNG32:${dest}"
+  else
+    return 1
+  fi
+}
+
+gfn_install_box_art() {
+  local src="$1" dest="$2" dims=""
+  if ! dims="$(gfn_box_art_ping "$src" 2>/dev/null)"; then
+    echo "warning: could not resize box art for $CMS_ID" >&2
+    return 1
+  fi
+  if ! gfn_box_art_dims_ok "$dims"; then
+    return 1
+  fi
+  if gfn_box_art_resize "$src" "$dest" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$dest"
+  echo "warning: could not resize box art for $CMS_ID" >&2
+  return 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -229,11 +329,8 @@ if [[ -n "$BOX_ART_URL" ]]; then
     -o "$tmp_img" \
     -- \
     "$BOX_ART_URL"; then
-    if magick "$tmp_img" -resize '362x512>' -strip "PNG32:${ICON_PATH}" 2>/dev/null \
-      || convert "$tmp_img" -resize '362x512>' -strip "PNG32:${ICON_PATH}" 2>/dev/null; then
+    if gfn_install_box_art "$tmp_img" "$ICON_PATH"; then
       ICON_VALUE="$ICON_PATH"
-    else
-      echo "warning: could not resize box art for $CMS_ID" >&2
     fi
   else
     echo "warning: could not download box art for $CMS_ID" >&2
