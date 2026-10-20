@@ -184,7 +184,50 @@ if grep -q '^X-GFN-CmsId=102670811$' "$(desktop_path "$work" "$GOOD_CMS")"; then
 else
   die "happy path missing X-GFN-CmsId"
 fi
+if grep -q '^Name=GFN - Diablo IV$' "$(desktop_path "$work" "$GOOD_CMS")"; then
+  ok "happy path Name is GFN - Diablo IV"
+else
+  die "happy path Name wrong: $(grep '^Name=' "$(desktop_path "$work" "$GOOD_CMS")")"
+fi
+if grep -q '^GenericName=Diablo IV$' "$(desktop_path "$work" "$GOOD_CMS")"; then
+  ok "happy path GenericName is bare title"
+else
+  die "happy path GenericName wrong: $(grep '^GenericName=' "$(desktop_path "$work" "$GOOD_CMS")")"
+fi
+if grep -q '^Comment=Steam$' "$(desktop_path "$work" "$GOOD_CMS")"; then
+  ok "happy path Comment is store"
+else
+  die "happy path Comment wrong: $(grep '^Comment=' "$(desktop_path "$work" "$GOOD_CMS")")"
+fi
 rm -rf "$work"
+
+# --- GFN prefix is idempotent (overlay may pass "GFN - <Game>") ------------
+for pre_title in "GFN - Diablo IV" "GFN - GFN - Diablo IV" "GFN -  GFN - Diablo IV"; do
+  work="$(new_work)"
+  mkdir -p "${work}/tmp"
+  rc=0
+  run_writer "$work" \
+    --cms-id "$GOOD_CMS" \
+    --parent-game-id "$GOOD_PARENT" \
+    --title "$pre_title" \
+    --short-name "" \
+    --app-store "STEAM" \
+    --force >/dev/null || rc=$?
+  assert_eq "idempotent prefix exit (${pre_title})" "$rc" "0"
+  desk="$(desktop_path "$work" "$GOOD_CMS")"
+  assert_safe_desktop "$desk" "idempotent (${pre_title})"
+  name="$(grep '^Name=' "$desk" | head -1)"
+  assert_eq "idempotent Name (${pre_title})" "$name" "Name=GFN - Diablo IV"
+  gname="$(grep '^GenericName=' "$desk" | head -1)"
+  assert_eq "idempotent GenericName (${pre_title})" "$gname" "GenericName=Diablo IV"
+  catalog="${work}/data/matt-dance.gfn-omarchy/games.json"
+  if [[ -f "$catalog" ]] && python3 -c 'import json,sys; g=json.load(open(sys.argv[1])); assert g[0]["title"]=="Diablo IV"' "$catalog"; then
+    ok "idempotent games.json bare title (${pre_title})"
+  else
+    die "idempotent games.json title not bare for ${pre_title}: $(cat "$catalog" 2>/dev/null || true)"
+  fi
+  rm -rf "$work"
+done
 
 # --- ID fields: newline + Exec= must refuse and write nothing --------------
 for field in --cms-id --parent-game-id --short-name --app-store; do
