@@ -51,6 +51,16 @@ strip_controls() {
   printf '%s' "$1" | LC_ALL=C tr -d '\000-\037\177'
 }
 
+# Overlay enrichRow may already pass "GFN - <Game>"; strip before re-adding once.
+strip_gfn_prefix() {
+  local t="$1"
+  while [[ "$t" == "GFN - "* ]]; do
+    t="${t#GFN - }"
+    t="${t#"${t%%[![:space:]]*}"}"
+  done
+  printf '%s' "$t"
+}
+
 # Desktop Entry string escapes: \\ \n \t \r and leading/trailing \s.
 # Control characters should already have been stripped; these remain as defense.
 escape_desktop_string() {
@@ -262,6 +272,8 @@ GAME_TITLE="$(strip_controls "$GAME_TITLE")"
 # Trim surrounding whitespace after control strip.
 GAME_TITLE="${GAME_TITLE#"${GAME_TITLE%%[![:space:]]*}"}"
 GAME_TITLE="${GAME_TITLE%"${GAME_TITLE##*[![:space:]]}"}"
+# Idempotent: overlay may pass "GFN - <Game>" (or already doubled); bare name only.
+GAME_TITLE="$(strip_gfn_prefix "$GAME_TITLE")"
 if [[ -z "$GAME_TITLE" ]]; then
   echo "error: --title is empty after removing control characters" >&2
   exit 2

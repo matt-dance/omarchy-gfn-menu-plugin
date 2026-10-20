@@ -48,14 +48,22 @@ function humanizeStore(appStore) {
 }
 
 /**
- * Primary list/menu label: "GFN - Diablo IV".
+ * Bare game name with any leading "GFN - " prefixes removed.
+ * Overlay enrichRow prefixes for display; writers must get the bare title.
+ */
+function bareTitle(title, fallback) {
+  var t = String(title || "").trim()
+  while (t.indexOf("GFN - ") === 0)
+    t = t.slice(6).trim()
+  return t || (fallback || "game")
+}
+
+/**
+ * Primary list/menu label: "GFN - Diablo IV" (idempotent).
  */
 function primaryLabel(game) {
   var g = game || {}
-  var title = String(g.title || "game").trim() || "game"
-  if (title.indexOf("GFN - ") === 0)
-    return title
-  return "GFN - " + title
+  return "GFN - " + bareTitle(g.title, "game")
 }
 
 /**
@@ -206,12 +214,13 @@ function effectiveShortName(shortName) {
  */
 function writeDesktopEntryCommand(scriptPath, game) {
   var g = game || {}
+  // Pass bare title: enrichRow may already set title to "GFN - <Game>".
   var argv = [
     "bash",
     String(scriptPath),
     "--cms-id", String(g.cmsId || ""),
     "--parent-game-id", String(g.id || g.parentGameId || ""),
-    "--title", stripControls(String(g.title || "GeForce NOW Game")),
+    "--title", bareTitle(stripControls(String(g.title || "")), "GeForce NOW Game"),
     "--force"
   ]
   // Always pass --short-name so an empty catalog value stays empty
@@ -238,7 +247,7 @@ function launchCommand(playScriptPath, game) {
     "--cms-id", String(g.cmsId || ""),
     "--parent-game-id", String(g.id || g.parentGameId || ""),
     "--short-name", effectiveShortName(g.shortName),
-    "--title", stripControls(String(g.title || "GeForce NOW game"))
+    "--title", bareTitle(stripControls(String(g.title || "")), "GeForce NOW game")
   ]
   return argv
 }

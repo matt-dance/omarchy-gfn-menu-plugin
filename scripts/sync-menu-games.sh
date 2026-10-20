@@ -52,9 +52,16 @@ def esc(s):
 def strip_controls(text):
     return re.sub(r"[\x00-\x1f\x7f]", "", str(text or ""))
 
+def bare_title(text):
+    # games.json / overlay may already store "GFN - <Game>" (or doubled).
+    t = strip_controls(text).strip()
+    while t.startswith("GFN - "):
+        t = t[6:].strip()
+    return t or "GeForce NOW Game"
+
 lines = []
 for g in games:
-    title = strip_controls(g.get("title") or "GeForce NOW Game").strip() or "GeForce NOW Game"
+    title = bare_title(g.get("title") or "GeForce NOW Game")
     raw_store = strip_controls(g.get("appStore") or "").strip()
     if raw_store and not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", raw_store):
         continue
